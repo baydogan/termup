@@ -30,6 +30,7 @@ func Start() {
 	}
 
 	srv := api.New()
+	log.Printf("ztd listening on unix socket %s", socketPath)
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln) }()
@@ -49,5 +50,6 @@ func Start() {
 		if err := srv.Shutdown(shCtx); err != nil {
 			log.Printf("shutdown error: %v", err)
 		}
+		log.Println("ztd stopped")
 	}
 }

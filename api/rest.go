@@ -14,7 +14,7 @@ type API struct {
 func New() *API {
 	app := fiber.New(
 		fiber.Config{
-			DisableStartupMessage: true,
+			//		DisableStartupMessage: true,
 		})
 
 	api := &API{router: app}
