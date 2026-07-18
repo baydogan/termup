@@ -13,7 +13,7 @@ import (
 	"github.com/baydogan/zerotolerance/api"
 )
 
-const socketPath = "/tmp/ztd.sock" // ileride config/flag
+const socketPath = "/tmp/ztd.sock"
 
 func Start() {
 	if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {

@@ -1,0 +1,8 @@
+.git
+.idea
+*.md
+Makefile
+Dockerfile
+.dockerignore
+.DS_Store
+testdata
