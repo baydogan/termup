@@ -17,21 +17,35 @@ import (
 const socketPath = "/tmp/ztd.sock"
 
 func Start() {
+	ln := initializeListener()
+	store := initializeStorage()
+	srv := initializeAPI(store)
+	run(srv, ln)
+}
+
+func initializeStorage() storage.Store {
+	return storage.New()
+}
+
+func initializeListener() net.Listener {
 	if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.Fatalf("remove stale socket: %v", err)
 	}
-
 	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
 		log.Fatalf("listen unix socket: %v", err)
 	}
-
 	if err := os.Chmod(socketPath, 0o600); err != nil {
 		log.Fatalf("chmod socket: %v", err)
 	}
+	return ln
+}
 
-	store := initializeStorage()
-	srv := api.New(store)
+func initializeAPI(store storage.Reader) *api.API {
+	return api.New(store)
+}
+
+func run(srv *api.API, ln net.Listener) {
 	log.Printf("ztd listening on unix socket %s", socketPath)
 
 	serveErr := make(chan error, 1)
@@ -54,8 +68,4 @@ func Start() {
 		}
 		log.Println("ztd stopped")
 	}
-}
-
-func initializeStorage() storage.Store {
-	return storage.New()
 }
