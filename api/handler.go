@@ -6,7 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-type Handler[Req, Resp any] interface {
+type Handler[Req, Res any] interface {
 	Handle(ctx context.Context, req *Req) (*Res, error)
 }
 

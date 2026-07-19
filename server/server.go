@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/baydogan/zerotolerance/api"
+	"github.com/baydogan/zerotolerance/storage"
 )
 
 const socketPath = "/tmp/ztd.sock"
@@ -29,7 +30,8 @@ func Start() {
 		log.Fatalf("chmod socket: %v", err)
 	}
 
-	srv := api.New()
+	store := initializeStorage()
+	srv := api.New(store)
 	log.Printf("ztd listening on unix socket %s", socketPath)
 
 	serveErr := make(chan error, 1)
@@ -52,4 +54,8 @@ func Start() {
 		}
 		log.Println("ztd stopped")
 	}
+}
+
+func initializeStorage() storage.Store {
+	return storage.New()
 }

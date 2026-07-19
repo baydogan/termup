@@ -9,6 +9,7 @@ import (
 
 type API struct {
 	router *fiber.App
+	store  Reader
 }
 
 func New(store Reader) *API {
