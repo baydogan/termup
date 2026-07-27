@@ -20,11 +20,11 @@ func New(store Reader) *API {
 }
 
 func (a *API) routes() {
-	//listH := &ListHandler{store: a.store}
-	// statusH := &StatusHandler{store: a.store}
+	listH := &ListHandler{store: a.store}
+	statusH := &StatusHandler{store: a.store}
 
-	// a.router.Get("/v1/monitors", a.listMonitors)
-	// a.router.Get("/v1/monitors/:name/status", a.status)
+	a.router.Get("/v1/monitors", handle[ListRequest, ListResponse](listH))
+	a.router.Get("/v1/monitors/:name/status", handle[StatusRequest, StatusResponse](statusH))
 	// a.router.Get("/v1/watch", a.watch) // SSE (fasthttp stream)
 }
 

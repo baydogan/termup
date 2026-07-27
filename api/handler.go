@@ -21,7 +21,7 @@ func handle[Req, Res any](h Handler[Req, Res]) fiber.Handler {
 		}
 		res, err := h.Handle(context.Background(), &req)
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(errBody(err))
+			return c.Status(httpStatus(err)).JSON(errBody(err))
 		}
 		return c.JSON(res)
 	}
