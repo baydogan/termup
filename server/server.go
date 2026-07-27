@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/baydogan/zerotolerance/api"
+	"github.com/baydogan/zerotolerance/monitor"
 	"github.com/baydogan/zerotolerance/storage"
 )
 
@@ -24,7 +25,13 @@ func Start() {
 }
 
 func initializeStorage() storage.Store {
-	return storage.New()
+	store := storage.New(
+		monitor.Monitor{Name: "google", URL: "https://google.com"},
+		monitor.Monitor{Name: "example", URL: "https://example.com"},
+	)
+	//TODO false data will be remove
+	_ = store.Save(monitor.Result{MonitorName: "google", Up: true})
+	return store
 }
 
 func initializeListener() net.Listener {

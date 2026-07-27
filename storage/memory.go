@@ -12,8 +12,8 @@ type Memory struct {
 	statuses map[string]monitor.Status
 }
 
-func New() *Memory {
-	return &Memory{statuses: make(map[string]monitor.Status)}
+func New(seed ...monitor.Monitor) *Memory {
+	return &Memory{monitors: seed, statuses: make(map[string]monitor.Status)}
 }
 
 func (s *Memory) List() []monitor.Monitor {
@@ -37,5 +37,11 @@ func (s *Memory) GetStatus(name string) (monitor.Status, error) {
 func (s *Memory) Save(r monitor.Result) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	state := monitor.StateDown
+	if r.Up {
+		state = monitor.StateUp
+	}
+	s.statuses[r.MonitorName] = monitor.Status{State: state}
 	return nil
 }
