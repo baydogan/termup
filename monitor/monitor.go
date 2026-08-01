@@ -1,5 +1,7 @@
 package monitor
 
+import "time"
+
 type Monitor struct {
 	Name string
 	URL  string
@@ -31,5 +33,14 @@ type Status struct {
 
 type Result struct {
 	MonitorName string
-	Up          bool
+	StatusCode  int
+	Latency     time.Duration
+	Err         error
+}
+
+func (r Result) State() State {
+	if r.Err == nil && r.StatusCode >= 200 && r.StatusCode < 300 {
+		return StateUp
+	}
+	return StateDown
 }

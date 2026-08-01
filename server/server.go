@@ -30,7 +30,7 @@ func initializeStorage() storage.Store {
 		monitor.Monitor{Name: "example", URL: "https://example.com"},
 	)
 	//TODO false data will be remove
-	_ = store.Save(monitor.Result{MonitorName: "google", Up: true})
+	_ = store.Save(monitor.Result{MonitorName: "google", StatusCode: 200})
 	return store
 }
 

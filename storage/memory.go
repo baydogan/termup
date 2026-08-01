@@ -38,10 +38,6 @@ func (s *Memory) Save(r monitor.Result) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	state := monitor.StateDown
-	if r.Up {
-		state = monitor.StateUp
-	}
-	s.statuses[r.MonitorName] = monitor.Status{State: state}
+	s.statuses[r.MonitorName] = monitor.Status{State: r.State()}
 	return nil
 }
