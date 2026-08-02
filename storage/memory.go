@@ -41,3 +41,20 @@ func (s *Memory) Save(r monitor.Result) error {
 	s.statuses[r.MonitorName] = monitor.Status{State: r.State()}
 	return nil
 }
+
+func (s *Memory) Sync(monitors []monitor.Monitor) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.monitors = monitors
+
+	keep := make(map[string]struct{}, len(monitors))
+	for _, m := range monitors {
+		keep[m.Name] = struct{}{}
+	}
+	for name := range s.statuses {
+		if _, ok := keep[name]; !ok {
+			delete(s.statuses, name)
+		}
+	}
+}

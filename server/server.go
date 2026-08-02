@@ -33,7 +33,7 @@ func Start() {
 	store := initializeStorage(cfg)
 	srv := initializeAPI(store)
 	sched := initializeScheduler(store)
-	run(srv, sched, ln)
+	run(srv, sched, store, ln)
 }
 
 func loadConfig() *config.Config {
@@ -72,11 +72,26 @@ func initializeAPI(store storage.Reader) *api.API {
 	return api.New(store)
 }
 
-func run(srv *api.API, sched *scheduler.Scheduler, ln net.Listener) {
+func run(srv *api.API, sched *scheduler.Scheduler, store storage.Store, ln net.Listener) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	go sched.Run(ctx)
+
+	go func() {
+		err := config.Watch(ctx, configPath,
+			func(c *config.Config) {
+				store.Sync(c.ToMonitors())
+				log.Printf("config reloaded: %d monitors", len(c.Monitors))
+			},
+			func(err error) {
+				log.Printf("config reload skipped: %v", err) // eski liste korunur
+			},
+		)
+		if err != nil {
+			log.Printf("config watcher stopped: %v", err)
+		}
+	}()
 
 	log.Printf("ztd listening on unix socket %s", socketPath)
 

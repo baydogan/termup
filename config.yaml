@@ -1,0 +1,7 @@
+monitors:
+  - name: google
+    url: https://google.com
+  - name: example
+    url: https://example.com
+  - name: github
+    url: https://github.com

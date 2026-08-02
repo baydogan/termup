@@ -20,4 +20,5 @@ type Store interface {
 
 type Writer interface {
 	Save(monitor.Result) error
+	Sync(monitors []monitor.Monitor)
 }
