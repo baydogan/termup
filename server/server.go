@@ -11,13 +11,15 @@ import (
 	"time"
 
 	"github.com/baydogan/zerotolerance/api"
-	"github.com/baydogan/zerotolerance/monitor"
+	"github.com/baydogan/zerotolerance/config"
 	"github.com/baydogan/zerotolerance/probe"
 	"github.com/baydogan/zerotolerance/scheduler"
 	"github.com/baydogan/zerotolerance/storage"
 )
 
 const socketPath = "/tmp/ztd.sock"
+
+const configPath = "config.yaml"
 
 const (
 	probeInterval = 30 * time.Second
@@ -26,11 +28,20 @@ const (
 )
 
 func Start() {
+	cfg := loadConfig()
 	ln := initializeListener()
-	store := initializeStorage()
+	store := initializeStorage(cfg)
 	srv := initializeAPI(store)
 	sched := initializeScheduler(store)
 	run(srv, sched, ln)
+}
+
+func loadConfig() *config.Config {
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
+	return cfg
 }
 
 func initializeScheduler(store storage.Store) *scheduler.Scheduler {
@@ -39,14 +50,8 @@ func initializeScheduler(store storage.Store) *scheduler.Scheduler {
 	return scheduler.New(prober, store, clock, probeInterval, probeTimeout, probeWorkers)
 }
 
-func initializeStorage() storage.Store {
-	store := storage.New(
-		monitor.Monitor{Name: "google", URL: "https://google.com"},
-		monitor.Monitor{Name: "example", URL: "https://example.com"},
-	)
-	//TODO false data will be remove
-	_ = store.Save(monitor.Result{MonitorName: "google", StatusCode: 200})
-	return store
+func initializeStorage(cfg *config.Config) storage.Store {
+	return storage.New(cfg.ToMonitors()...)
 }
 
 func initializeListener() net.Listener {
