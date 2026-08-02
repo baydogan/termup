@@ -12,16 +12,31 @@ import (
 
 	"github.com/baydogan/zerotolerance/api"
 	"github.com/baydogan/zerotolerance/monitor"
+	"github.com/baydogan/zerotolerance/probe"
+	"github.com/baydogan/zerotolerance/scheduler"
 	"github.com/baydogan/zerotolerance/storage"
 )
 
 const socketPath = "/tmp/ztd.sock"
 
+const (
+	probeInterval = 30 * time.Second
+	probeTimeout  = 10 * time.Second
+	probeWorkers  = 5
+)
+
 func Start() {
 	ln := initializeListener()
 	store := initializeStorage()
 	srv := initializeAPI(store)
-	run(srv, ln)
+	sched := initializeScheduler(store)
+	run(srv, sched, ln)
+}
+
+func initializeScheduler(store storage.Store) *scheduler.Scheduler {
+	prober := probe.NewHTTP(probeTimeout)
+	clock := scheduler.RealClock()
+	return scheduler.New(prober, store, clock, probeInterval, probeTimeout, probeWorkers)
 }
 
 func initializeStorage() storage.Store {
@@ -52,14 +67,16 @@ func initializeAPI(store storage.Reader) *api.API {
 	return api.New(store)
 }
 
-func run(srv *api.API, ln net.Listener) {
+func run(srv *api.API, sched *scheduler.Scheduler, ln net.Listener) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go sched.Run(ctx)
+
 	log.Printf("ztd listening on unix socket %s", socketPath)
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln) }()
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	select {
 	case err := <-serveErr:
