@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -75,5 +76,9 @@ func (s *Scheduler) probeOne(ctx context.Context, m monitor.Monitor) {
 	defer cancel()
 
 	res := s.prober.Probe(pctx, &m)
-	_ = s.store.Save(res)
+	if err := s.store.Save(res); err != nil {
+		log.Printf("probe %s: save failed: %v", m.Name, err)
+	}
+	log.Printf("probe %-10s -> %-4s (code=%d, %s)",
+		m.Name, res.State(), res.StatusCode, res.Latency.Round(time.Millisecond))
 }
