@@ -11,6 +11,7 @@ var ErrNotFound = errors.New("monitor not found")
 type Reader interface {
 	List() []monitor.Monitor
 	GetStatus(name string) (monitor.Status, error)
+	History(name string) []monitor.Result
 }
 
 type Store interface {

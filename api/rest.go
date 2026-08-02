@@ -22,10 +22,11 @@ func New(store Reader) *API {
 func (a *API) routes() {
 	listH := &ListHandler{store: a.store}
 	statusH := &StatusHandler{store: a.store}
+	dashH := &DashboardHandler{store: a.store}
 
 	a.router.Get("/v1/monitors", handle[ListRequest, ListResponse](listH))
 	a.router.Get("/v1/monitors/:name/status", handle[StatusRequest, StatusResponse](statusH))
-	// a.router.Get("/v1/watch", a.watch) // SSE (fasthttp stream)
+	a.router.Get("/v1/dashboard", handle[DashboardRequest, DashboardResponse](dashH))
 }
 
 func (a *API) Serve(ln net.Listener) error {

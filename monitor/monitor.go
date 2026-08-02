@@ -36,6 +36,7 @@ type Result struct {
 	StatusCode  int
 	Latency     time.Duration
 	Err         error
+	CheckedAt   time.Time
 }
 
 func (r Result) State() State {

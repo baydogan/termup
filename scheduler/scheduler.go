@@ -76,6 +76,7 @@ func (s *Scheduler) probeOne(ctx context.Context, m monitor.Monitor) {
 	defer cancel()
 
 	res := s.prober.Probe(pctx, &m)
+	res.CheckedAt = s.clock.Now()
 	if err := s.store.Save(res); err != nil {
 		log.Printf("probe %s: save failed: %v", m.Name, err)
 	}
