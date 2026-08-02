@@ -11,7 +11,7 @@ import (
 )
 
 type Prober interface {
-	Probe(ctx context.Context, m *monitor.Result) monitor.Result
+	Probe(ctx context.Context, m *monitor.Monitor) monitor.Result
 }
 
 type HTTP struct {
@@ -32,7 +32,7 @@ func NewHTTP(timeout time.Duration) *HTTP {
 	}
 }
 
-func (h *HTTP) Probe(ctx context.Context, m monitor.Monitor) monitor.Result {
+func (h *HTTP) Probe(ctx context.Context, m *monitor.Monitor) monitor.Result {
 	start := time.Now()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.URL, nil)
