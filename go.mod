@@ -1,4 +1,4 @@
-module github.com/baydogan/zerotolerance
+module github.com/baydogan/termup
 
 go 1.26.4
 

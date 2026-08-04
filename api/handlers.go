@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 
-	"github.com/baydogan/zerotolerance/monitor"
+	"github.com/baydogan/termup/monitor"
 )
 
 type Reader interface {

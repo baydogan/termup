@@ -3,7 +3,7 @@ package storage
 import (
 	"errors"
 
-	"github.com/baydogan/zerotolerance/monitor"
+	"github.com/baydogan/termup/monitor"
 )
 
 var ErrNotFound = errors.New("monitor not found")

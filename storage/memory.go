@@ -3,7 +3,7 @@ package storage
 import (
 	"sync"
 
-	"github.com/baydogan/zerotolerance/monitor"
+	"github.com/baydogan/termup/monitor"
 )
 
 // historySize is how many recent results we keep per monitor (in-memory ring

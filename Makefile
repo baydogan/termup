@@ -1,5 +1,5 @@
-IMAGE := zerotolerance
-CONTAINER := ztd
+IMAGE := termup
+CONTAINER := termupd
 
 .PHONY: up down
 

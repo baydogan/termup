@@ -1,6 +1,6 @@
 package main
 
-import "github.com/baydogan/zerotolerance/server"
+import "github.com/baydogan/termup/server"
 
 func main() {
 	start()

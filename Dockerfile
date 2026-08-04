@@ -5,9 +5,9 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 # CGO disabled: pure-Go build for now (no sqlite/CGO deps yet)
-RUN CGO_ENABLED=0 go build -o /out/ztd ./cmd/ztd
+RUN CGO_ENABLED=0 go build -o /out/termupd ./cmd/termupd
 
 # ---- run stage ----
 FROM alpine:3.20
-COPY --from=build /out/ztd /usr/local/bin/ztd
-ENTRYPOINT ["ztd"]
+COPY --from=build /out/termupd /usr/local/bin/termupd
+ENTRYPOINT ["termupd"]

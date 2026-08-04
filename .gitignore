@@ -1,1 +1,8 @@
 .idea/
+CLAUDE.md
+
+# compiled binaries (root-level only; cmd/termup* dirs are anchored out)
+/termup
+/termupd
+/zt
+/ztd

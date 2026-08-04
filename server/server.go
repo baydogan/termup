@@ -10,14 +10,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/baydogan/zerotolerance/api"
-	"github.com/baydogan/zerotolerance/config"
-	"github.com/baydogan/zerotolerance/probe"
-	"github.com/baydogan/zerotolerance/scheduler"
-	"github.com/baydogan/zerotolerance/storage"
+	"github.com/baydogan/termup/api"
+	"github.com/baydogan/termup/config"
+	"github.com/baydogan/termup/probe"
+	"github.com/baydogan/termup/scheduler"
+	"github.com/baydogan/termup/storage"
 )
 
-const socketPath = "/tmp/ztd.sock"
+const socketPath = "/tmp/termupd.sock"
 
 const configPath = "config.yaml"
 
@@ -93,7 +93,7 @@ func run(srv *api.API, sched *scheduler.Scheduler, store storage.Store, ln net.L
 		}
 	}()
 
-	log.Printf("ztd listening on unix socket %s", socketPath)
+	log.Printf("termupd listening on unix socket %s", socketPath)
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln) }()
@@ -110,6 +110,6 @@ func run(srv *api.API, sched *scheduler.Scheduler, store storage.Store, ln net.L
 		if err := srv.Shutdown(shCtx); err != nil {
 			log.Printf("shutdown error: %v", err)
 		}
-		log.Println("ztd stopped")
+		log.Println("termupd stopped")
 	}
 }

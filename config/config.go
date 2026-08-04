@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/baydogan/zerotolerance/monitor"
+	"github.com/baydogan/termup/monitor"
 	"github.com/goccy/go-yaml"
 )
 

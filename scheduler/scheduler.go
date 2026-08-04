@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/baydogan/zerotolerance/monitor"
-	"github.com/baydogan/zerotolerance/probe"
-	"github.com/baydogan/zerotolerance/storage"
+	"github.com/baydogan/termup/monitor"
+	"github.com/baydogan/termup/probe"
+	"github.com/baydogan/termup/storage"
 )
 
 type Clock interface {

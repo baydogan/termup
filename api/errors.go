@@ -3,7 +3,7 @@ package api
 import (
 	"errors"
 
-	"github.com/baydogan/zerotolerance/storage"
+	"github.com/baydogan/termup/storage"
 	"github.com/gofiber/fiber/v2"
 )
 

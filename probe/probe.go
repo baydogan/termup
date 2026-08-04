@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/baydogan/zerotolerance/monitor"
+	"github.com/baydogan/termup/monitor"
 )
 
 type Prober interface {
