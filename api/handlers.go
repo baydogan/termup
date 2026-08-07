@@ -7,15 +7,18 @@ import (
 )
 
 type Reader interface {
-	List() []monitor.Monitor
+	List() ([]monitor.Monitor, error)
 	GetStatus(name string) (monitor.Status, error)
-	History(name string) []monitor.Result
+	History(name string) ([]monitor.Result, error)
 }
 
 type ListHandler struct{ store Reader }
 
 func (h *ListHandler) Handle(_ context.Context, _ *ListRequest) (*ListResponse, error) {
-	ms := h.store.List()
+	ms, err := h.store.List()
+	if err != nil {
+		return nil, err
+	}
 	out := make([]MonitorDTO, 0, len(ms))
 	for _, m := range ms {
 		out = append(out, MonitorDTO{Name: m.Name, URL: m.URL})
@@ -36,10 +39,17 @@ func (h *StatusHandler) Handle(_ context.Context, req *StatusRequest) (*StatusRe
 type DashboardHandler struct{ store Reader }
 
 func (h *DashboardHandler) Handle(_ context.Context, _ *DashboardRequest) (*DashboardResponse, error) {
-	ms := h.store.List()
+	ms, err := h.store.List()
+	if err != nil {
+		return nil, err
+	}
 	out := make([]MonitorHealthDTO, 0, len(ms))
 	for _, m := range ms {
-		out = append(out, buildHealth(m, h.store.History(m.Name)))
+		hist, err := h.store.History(m.Name)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, buildHealth(m, hist))
 	}
 	return &DashboardResponse{Monitors: out}, nil
 }

@@ -50,7 +50,11 @@ func (s *Scheduler) Run(ctx context.Context) {
 }
 
 func (s *Scheduler) runOnce(ctx context.Context) {
-	monitors := s.store.List()
+	monitors, err := s.store.List()
+	if err != nil {
+		log.Printf("scheduler: list monitors: %v", err)
+		return
+	}
 
 	jobs := make(chan monitor.Monitor)
 	var wg sync.WaitGroup

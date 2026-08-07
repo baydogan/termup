@@ -9,9 +9,9 @@ import (
 var ErrNotFound = errors.New("monitor not found")
 
 type Reader interface {
-	List() []monitor.Monitor
+	List() ([]monitor.Monitor, error)
 	GetStatus(name string) (monitor.Status, error)
-	History(name string) []monitor.Result
+	History(name string) ([]monitor.Result, error)
 }
 
 type Store interface {
@@ -21,5 +21,5 @@ type Store interface {
 
 type Writer interface {
 	Save(monitor.Result) error
-	Sync(monitors []monitor.Monitor)
+	Sync(monitors []monitor.Monitor) error
 }

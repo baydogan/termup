@@ -21,12 +21,12 @@ func New(seed ...monitor.Monitor) *Memory {
 	return &Memory{monitors: seed, history: make(map[string][]monitor.Result)}
 }
 
-func (s *Memory) List() []monitor.Monitor {
+func (s *Memory) List() ([]monitor.Monitor, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]monitor.Monitor, len(s.monitors))
 	copy(out, s.monitors)
-	return out
+	return out, nil
 }
 
 func (s *Memory) GetStatus(name string) (monitor.Status, error) {
@@ -39,13 +39,13 @@ func (s *Memory) GetStatus(name string) (monitor.Status, error) {
 	return monitor.Status{State: h[len(h)-1].State()}, nil
 }
 
-func (s *Memory) History(name string) []monitor.Result {
+func (s *Memory) History(name string) ([]monitor.Result, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	h := s.history[name]
 	out := make([]monitor.Result, len(h))
 	copy(out, h)
-	return out
+	return out, nil
 }
 
 func (s *Memory) Save(r monitor.Result) error {
@@ -60,7 +60,7 @@ func (s *Memory) Save(r monitor.Result) error {
 	return nil
 }
 
-func (s *Memory) Sync(monitors []monitor.Monitor) {
+func (s *Memory) Sync(monitors []monitor.Monitor) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -75,4 +75,5 @@ func (s *Memory) Sync(monitors []monitor.Monitor) {
 			delete(s.history, name)
 		}
 	}
+	return nil
 }

@@ -15,11 +15,14 @@ import (
 	"github.com/baydogan/termup/probe"
 	"github.com/baydogan/termup/scheduler"
 	"github.com/baydogan/termup/storage"
+	"github.com/baydogan/termup/storage/sqlite"
 )
 
 const socketPath = "/tmp/termupd.sock"
 
 const configPath = "config.yaml"
+
+const dbPath = "termup.db"
 
 const (
 	probeInterval = 30 * time.Second
@@ -51,7 +54,14 @@ func initializeScheduler(store storage.Store) *scheduler.Scheduler {
 }
 
 func initializeStorage(cfg *config.Config) storage.Store {
-	return storage.New(cfg.ToMonitors()...)
+	store, err := sqlite.New(dbPath)
+	if err != nil {
+		log.Fatalf("open storage: %v", err)
+	}
+	if err := store.Sync(cfg.ToMonitors()); err != nil {
+		log.Fatalf("seed storage: %v", err)
+	}
+	return store
 }
 
 func initializeListener() net.Listener {
@@ -81,7 +91,10 @@ func run(srv *api.API, sched *scheduler.Scheduler, store storage.Store, ln net.L
 	go func() {
 		err := config.Watch(ctx, configPath,
 			func(c *config.Config) {
-				store.Sync(c.ToMonitors())
+				if err := store.Sync(c.ToMonitors()); err != nil {
+					log.Printf("config reload: sync failed: %v", err)
+					return
+				}
 				log.Printf("config reloaded: %d monitors", len(c.Monitors))
 			},
 			func(err error) {
