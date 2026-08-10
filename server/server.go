@@ -12,6 +12,7 @@ import (
 
 	"github.com/baydogan/termup/api"
 	"github.com/baydogan/termup/config"
+	"github.com/baydogan/termup/monitor"
 	"github.com/baydogan/termup/probe"
 	"github.com/baydogan/termup/scheduler"
 	"github.com/baydogan/termup/storage"
@@ -34,8 +35,9 @@ func Start() {
 	cfg := loadConfig()
 	ln := initializeListener()
 	store := initializeStorage(cfg)
-	srv := initializeAPI(store)
-	sched := initializeScheduler(store)
+	machine := monitor.NewMachine()
+	srv := initializeAPI(store, machine)
+	sched := initializeScheduler(store, machine)
 	run(srv, sched, store, ln)
 }
 
@@ -47,10 +49,10 @@ func loadConfig() *config.Config {
 	return cfg
 }
 
-func initializeScheduler(store storage.Store) *scheduler.Scheduler {
+func initializeScheduler(store storage.Store, machine *monitor.Machine) *scheduler.Scheduler {
 	prober := probe.NewHTTP(probeTimeout)
 	clock := scheduler.RealClock()
-	return scheduler.New(prober, store, clock, probeInterval, probeTimeout, probeWorkers)
+	return scheduler.New(prober, store, machine, clock, probeInterval, probeTimeout, probeWorkers)
 }
 
 func initializeStorage(cfg *config.Config) storage.Store {
@@ -78,8 +80,8 @@ func initializeListener() net.Listener {
 	return ln
 }
 
-func initializeAPI(store storage.Reader) *api.API {
-	return api.New(store)
+func initializeAPI(store storage.Reader, machine *monitor.Machine) *api.API {
+	return api.New(store, machine)
 }
 
 func run(srv *api.API, sched *scheduler.Scheduler, store storage.Store, ln net.Listener) {
@@ -98,7 +100,7 @@ func run(srv *api.API, sched *scheduler.Scheduler, store storage.Store, ln net.L
 				log.Printf("config reloaded: %d monitors", len(c.Monitors))
 			},
 			func(err error) {
-				log.Printf("config reload skipped: %v", err) // eski liste korunur
+				log.Printf("config reload skipped: %v", err) // previous list is kept
 			},
 		)
 		if err != nil {

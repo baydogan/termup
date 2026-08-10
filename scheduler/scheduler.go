@@ -26,14 +26,15 @@ func RealClock() Clock { return realClock{} }
 type Scheduler struct {
 	prober   probe.Prober
 	store    storage.Store
+	machine  *monitor.Machine
 	clock    Clock
 	interval time.Duration
 	timeout  time.Duration
 	workers  int
 }
 
-func New(p probe.Prober, s storage.Store, c Clock, interval, timeout time.Duration, workers int) *Scheduler {
-	return &Scheduler{prober: p, store: s, clock: c, interval: interval, timeout: timeout, workers: workers}
+func New(p probe.Prober, s storage.Store, m *monitor.Machine, c Clock, interval, timeout time.Duration, workers int) *Scheduler {
+	return &Scheduler{prober: p, store: s, machine: m, clock: c, interval: interval, timeout: timeout, workers: workers}
 }
 
 func (s *Scheduler) Run(ctx context.Context) {
@@ -86,4 +87,10 @@ func (s *Scheduler) probeOne(ctx context.Context, m monitor.Monitor) {
 	}
 	log.Printf("probe %-10s -> %-4s (code=%d, %s)",
 		m.Name, res.State(), res.StatusCode, res.Latency.Round(time.Millisecond))
+
+	// Feed the result into the state machine; a transition is alarm-worthy.
+	// Notifier wiring comes next; for now the change is logged.
+	if t, ok := s.machine.Observe(res); ok {
+		log.Printf("state change %s: %s -> %s", t.Monitor, t.From, t.To)
+	}
 }

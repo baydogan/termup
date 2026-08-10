@@ -4,12 +4,18 @@ import (
 	"context"
 
 	"github.com/baydogan/termup/monitor"
+	"github.com/baydogan/termup/storage"
 )
 
 type Reader interface {
 	List() ([]monitor.Monitor, error)
-	GetStatus(name string) (monitor.Status, error)
 	History(name string) ([]monitor.Result, error)
+}
+
+// StateReader serves the debounced State from the state machine, replacing the
+// raw last-result derivation the store used to expose.
+type StateReader interface {
+	State(name string) monitor.State
 }
 
 type ListHandler struct{ store Reader }
@@ -26,17 +32,26 @@ func (h *ListHandler) Handle(_ context.Context, _ *ListRequest) (*ListResponse, 
 	return &ListResponse{Monitors: out}, nil
 }
 
-type StatusHandler struct{ store Reader }
+type StatusHandler struct {
+	store Reader
+	state StateReader
+}
 
 func (h *StatusHandler) Handle(_ context.Context, req *StatusRequest) (*StatusResponse, error) {
-	st, err := h.store.GetStatus(req.Name)
+	ms, err := h.store.List()
 	if err != nil {
 		return nil, err
 	}
-	return &StatusResponse{Name: req.Name, State: st.State.String()}, nil
+	if !containsMonitor(ms, req.Name) {
+		return nil, storage.ErrNotFound
+	}
+	return &StatusResponse{Name: req.Name, State: h.state.State(req.Name).String()}, nil
 }
 
-type DashboardHandler struct{ store Reader }
+type DashboardHandler struct {
+	store Reader
+	state StateReader
+}
 
 func (h *DashboardHandler) Handle(_ context.Context, _ *DashboardRequest) (*DashboardResponse, error) {
 	ms, err := h.store.List()
@@ -49,14 +64,24 @@ func (h *DashboardHandler) Handle(_ context.Context, _ *DashboardRequest) (*Dash
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, buildHealth(m, hist))
+		out = append(out, buildHealth(m, hist, h.state.State(m.Name)))
 	}
 	return &DashboardResponse{Monitors: out}, nil
 }
 
-// buildHealth maps a monitor + its result history into the dashboard DTO.
-func buildHealth(m monitor.Monitor, hist []monitor.Result) MonitorHealthDTO {
-	dto := MonitorHealthDTO{Name: m.Name, URL: m.URL, State: monitor.StateUnknown.String()}
+func containsMonitor(ms []monitor.Monitor, name string) bool {
+	for _, m := range ms {
+		if m.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// buildHealth maps a monitor + its result history into the dashboard DTO. The
+// card State is the debounced machine state; the bars/uptime stay per-probe raw.
+func buildHealth(m monitor.Monitor, hist []monitor.Result, state monitor.State) MonitorHealthDTO {
+	dto := MonitorHealthDTO{Name: m.Name, URL: m.URL, State: state.String()}
 	if len(hist) == 0 {
 		return dto
 	}
@@ -76,7 +101,6 @@ func buildHealth(m monitor.Monitor, hist []monitor.Result) MonitorHealthDTO {
 	}
 
 	last := hist[len(hist)-1]
-	dto.State = last.State().String()
 	dto.LatencyMs = last.Latency.Milliseconds()
 	dto.UptimePct = float64(up) / float64(len(hist)) * 100
 	dto.Recent = recent
