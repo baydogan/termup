@@ -13,11 +13,10 @@ import (
 	"github.com/baydogan/termup/api"
 	"github.com/baydogan/termup/config"
 	"github.com/baydogan/termup/monitor"
-	"github.com/baydogan/termup/notify/stdout"
+	"github.com/baydogan/termup/notify"
 	"github.com/baydogan/termup/probe"
 	"github.com/baydogan/termup/scheduler"
 	"github.com/baydogan/termup/storage"
-	"github.com/baydogan/termup/storage/sqlite"
 )
 
 const socketPath = "/tmp/termupd.sock"
@@ -52,13 +51,13 @@ func loadConfig() *config.Config {
 
 func initializeScheduler(store storage.Store, machine *monitor.Machine) *scheduler.Scheduler {
 	prober := probe.NewHTTP(probeTimeout)
-	notifier := stdout.New()
+	notifier := notify.NewStdout()
 	clock := scheduler.RealClock()
 	return scheduler.New(prober, store, machine, notifier, clock, probeInterval, probeTimeout, probeWorkers)
 }
 
 func initializeStorage(cfg *config.Config) storage.Store {
-	store, err := sqlite.New(dbPath)
+	store, err := storage.NewSQLite(dbPath)
 	if err != nil {
 		log.Fatalf("open storage: %v", err)
 	}

@@ -1,4 +1,4 @@
-package sqlite
+package storage
 
 import (
 	"database/sql"
@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/baydogan/termup/monitor"
-	"github.com/baydogan/termup/storage"
 
 	_ "modernc.org/sqlite"
 )
@@ -16,13 +15,13 @@ import (
 // historyLimit is how many recent results History returns per monitor.
 const historyLimit = 60
 
-var _ storage.Store = (*Store)(nil)
+var _ Store = (*SQLite)(nil)
 
-type Store struct {
+type SQLite struct {
 	db *sql.DB
 }
 
-func New(path string) (*Store, error) {
+func NewSQLite(path string) (*SQLite, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
@@ -31,7 +30,7 @@ func New(path string) (*Store, error) {
 	// "database is locked" under the concurrent probe pool.
 	db.SetMaxOpenConns(1)
 
-	s := &Store{db: db}
+	s := &SQLite{db: db}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
@@ -39,9 +38,9 @@ func New(path string) (*Store, error) {
 	return s, nil
 }
 
-func (s *Store) Close() error { return s.db.Close() }
+func (s *SQLite) Close() error { return s.db.Close() }
 
-func (s *Store) migrate() error {
+func (s *SQLite) migrate() error {
 	const schema = `
 CREATE TABLE IF NOT EXISTS monitors (
 	name TEXT PRIMARY KEY,
@@ -63,7 +62,7 @@ CREATE INDEX IF NOT EXISTS idx_results_monitor ON results(monitor_name, id);`
 	return nil
 }
 
-func (s *Store) List() ([]monitor.Monitor, error) {
+func (s *SQLite) List() ([]monitor.Monitor, error) {
 	rows, err := s.db.Query(`SELECT name, url FROM monitors ORDER BY pos`)
 	if err != nil {
 		return nil, fmt.Errorf("list monitors: %w", err)
@@ -81,13 +80,13 @@ func (s *Store) List() ([]monitor.Monitor, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) GetStatus(name string) (monitor.Status, error) {
+func (s *SQLite) GetStatus(name string) (monitor.Status, error) {
 	row := s.db.QueryRow(
 		`SELECT status_code, latency_ms, err, checked_at FROM results
 		 WHERE monitor_name = ? ORDER BY id DESC LIMIT 1`, name)
 	r, err := scanResult(row, name)
 	if errors.Is(err, sql.ErrNoRows) {
-		return monitor.Status{}, storage.ErrNotFound
+		return monitor.Status{}, ErrNotFound
 	}
 	if err != nil {
 		return monitor.Status{}, fmt.Errorf("get status: %w", err)
@@ -95,7 +94,7 @@ func (s *Store) GetStatus(name string) (monitor.Status, error) {
 	return monitor.Status{State: r.State()}, nil
 }
 
-func (s *Store) History(name string) ([]monitor.Result, error) {
+func (s *SQLite) History(name string) ([]monitor.Result, error) {
 	// take the last N by id, then return chronological (oldest -> newest)
 	rows, err := s.db.Query(
 		`SELECT status_code, latency_ms, err, checked_at FROM (
@@ -118,7 +117,7 @@ func (s *Store) History(name string) ([]monitor.Result, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) Save(r monitor.Result) error {
+func (s *SQLite) Save(r monitor.Result) error {
 	var errStr string
 	if r.Err != nil {
 		errStr = r.Err.Error()
@@ -133,7 +132,7 @@ func (s *Store) Save(r monitor.Result) error {
 	return nil
 }
 
-func (s *Store) Sync(monitors []monitor.Monitor) error {
+func (s *SQLite) Sync(monitors []monitor.Monitor) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return fmt.Errorf("sync begin: %w", err)

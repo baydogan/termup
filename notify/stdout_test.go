@@ -1,4 +1,4 @@
-package stdout_test
+package notify_test
 
 import (
 	"bytes"
@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/baydogan/termup/monitor"
-	"github.com/baydogan/termup/notify/stdout"
+	"github.com/baydogan/termup/notify"
 )
 
-func TestNotifyFormat(t *testing.T) {
+func TestStdoutNotifyFormat(t *testing.T) {
 	var buf bytes.Buffer
-	n := stdout.NewWriter(&buf)
+	n := notify.NewStdoutWriter(&buf)
 
 	tr := monitor.Transition{
 		Monitor: "local",
