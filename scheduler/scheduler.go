@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/baydogan/termup/monitor"
+	"github.com/baydogan/termup/notify"
 	"github.com/baydogan/termup/probe"
 	"github.com/baydogan/termup/storage"
 )
@@ -27,14 +28,15 @@ type Scheduler struct {
 	prober   probe.Prober
 	store    storage.Store
 	machine  *monitor.Machine
+	notifier notify.Notifier
 	clock    Clock
 	interval time.Duration
 	timeout  time.Duration
 	workers  int
 }
 
-func New(p probe.Prober, s storage.Store, m *monitor.Machine, c Clock, interval, timeout time.Duration, workers int) *Scheduler {
-	return &Scheduler{prober: p, store: s, machine: m, clock: c, interval: interval, timeout: timeout, workers: workers}
+func New(p probe.Prober, s storage.Store, m *monitor.Machine, n notify.Notifier, c Clock, interval, timeout time.Duration, workers int) *Scheduler {
+	return &Scheduler{prober: p, store: s, machine: m, notifier: n, clock: c, interval: interval, timeout: timeout, workers: workers}
 }
 
 func (s *Scheduler) Run(ctx context.Context) {
@@ -89,8 +91,10 @@ func (s *Scheduler) probeOne(ctx context.Context, m monitor.Monitor) {
 		m.Name, res.State(), res.StatusCode, res.Latency.Round(time.Millisecond))
 
 	// Feed the result into the state machine; a transition is alarm-worthy.
-	// Notifier wiring comes next; for now the change is logged.
 	if t, ok := s.machine.Observe(res); ok {
 		log.Printf("state change %s: %s -> %s", t.Monitor, t.From, t.To)
+		if err := s.notifier.Notify(t); err != nil {
+			log.Printf("notify %s: %v", t.Monitor, err)
+		}
 	}
 }
