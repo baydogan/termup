@@ -27,7 +27,9 @@ func TestCheckAt(t *testing.T) {
 		},
 	}
 
-	// bar row y: row0 = headerRows+barRowInCard = 5; row1 = +cardTotalH = 11.
+	// bar row y is derived from the layout constants so it tracks headerRows.
+	row0 := headerRows + barRowInCard              // grid row 0 bar line
+	row1 := headerRows + cardTotalH + barRowInCard // grid row 1 bar line
 	// bar first cell x: col0 = barColStart = 2; col1 = cardTotalW+2 = 44.
 	cases := []struct {
 		name       string
@@ -36,17 +38,17 @@ func TestCheckAt(t *testing.T) {
 		wantMon    string
 		wantStatus int // == index into that monitor's Recent
 	}{
-		{"m0 first bar", 2, 5, true, "m0", 0},
-		{"m0 fifth bar", 6, 5, true, "m0", 4},
-		{"m1 first bar", 44, 5, true, "m1", 0},
-		{"m2 first bar (row1)", 2, 11, true, "m2", 50 - barLen}, // tail window start
-		{"m2 last bar", 2 + barLen - 1, 11, true, "m2", 49},
-		{"border cell", 0, 5, false, "", 0},
-		{"padding cell", 1, 5, false, "", 0},
-		{"not a bar row", 2, 4, false, "", 0},
-		{"below bar row", 2, 6, false, "", 0},
-		{"past available bars", 8, 5, false, "", 0},       // m0 has only 5 checks
-		{"empty area (no monitor)", 44, 11, false, "", 0}, // row1,col1 has no monitor
+		{"m0 first bar", 2, row0, true, "m0", 0},
+		{"m0 fifth bar", 6, row0, true, "m0", 4},
+		{"m1 first bar", 44, row0, true, "m1", 0},
+		{"m2 first bar (row1)", 2, row1, true, "m2", 50 - barLen}, // tail window start
+		{"m2 last bar", 2 + barLen - 1, row1, true, "m2", 49},
+		{"border cell", 0, row0, false, "", 0},
+		{"padding cell", 1, row0, false, "", 0},
+		{"not a bar row", 2, row0 - 1, false, "", 0},
+		{"below bar row", 2, row0 + 1, false, "", 0},
+		{"past available bars", 8, row0, false, "", 0},      // m0 has only 5 checks
+		{"empty area (no monitor)", 44, row1, false, "", 0}, // row1,col1 has no monitor
 	}
 
 	for _, tc := range cases {

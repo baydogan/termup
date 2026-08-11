@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/baydogan/termup/api"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -74,15 +75,17 @@ func newClient(addr string) (*http.Client, string) {
 // ---- bubbletea model ----
 
 type model struct {
-	client  *http.Client
-	base    string
-	health  []api.MonitorHealthDTO
-	err     error
-	updated time.Time
-	width   int
-	height  int
-	hover   *hoverInfo
-	sel     *selRef
+	client    *http.Client
+	base      string
+	health    []api.MonitorHealthDTO
+	err       error
+	updated   time.Time
+	width     int
+	height    int
+	hover     *hoverInfo
+	sel       *selRef
+	filter    textinput.Model
+	filtering bool // true while the filter input is focused
 }
 
 // hoverInfo is the check the mouse is currently over, shown in the detail panel.
@@ -107,7 +110,10 @@ type dataMsg struct {
 type tickMsg time.Time
 
 func newModel(c *http.Client, base string) model {
-	return model{client: c, base: base}
+	ti := textinput.New()
+	ti.Placeholder = "name or url…"
+	ti.Prompt = "" // the filter box draws its own "⌕ " label
+	return model{client: c, base: base, filter: ti}
 }
 
 func (m model) Init() tea.Cmd {
@@ -128,9 +134,32 @@ func (m model) fetch() tea.Msg {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.filtering {
+			switch msg.String() {
+			case "esc": // cancel: clear the filter and leave input mode
+				m.filtering = false
+				m.filter.Blur()
+				m.filter.SetValue("")
+				m.clampSelection()
+				return m, nil
+			case "enter": // apply: keep the query, leave input mode
+				m.filtering = false
+				m.filter.Blur()
+				return m, nil
+			default:
+				var cmd tea.Cmd
+				m.filter, cmd = m.filter.Update(msg)
+				m.clampSelection() // the filtered set may have shrunk
+				return m, cmd
+			}
+		}
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
 			return m, tea.Quit
+		case "/":
+			m.filtering = true
+			m.hover = nil
+			return m, m.filter.Focus()
 		case "r":
 			return m, m.fetch
 		case "tab":
@@ -164,15 +193,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// visible is the monitor list after applying the filter query. All rendering,
+// navigation and hit-testing operate on this, so indices track what's on screen.
+func (m model) visible() []api.MonitorHealthDTO {
+	q := strings.ToLower(strings.TrimSpace(m.filter.Value()))
+	if q == "" {
+		return m.health
+	}
+	out := make([]api.MonitorHealthDTO, 0, len(m.health))
+	for _, h := range m.health {
+		if strings.Contains(strings.ToLower(h.Name), q) || strings.Contains(strings.ToLower(h.URL), q) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
 // ---- keyboard selection ----
 
 func (m *model) moveMonitor(d int) {
-	n := len(m.health)
+	vis := m.visible()
+	n := len(vis)
 	if n == 0 {
 		return
 	}
 	if m.sel == nil {
-		m.sel = &selRef{mon: 0, check: lastCheck(m.health[0])}
+		m.sel = &selRef{mon: 0, check: lastCheck(vis[0])}
 		return
 	}
 	m.sel.mon = (m.sel.mon + d%n + n) % n
@@ -180,27 +226,29 @@ func (m *model) moveMonitor(d int) {
 }
 
 func (m *model) moveCheck(d int) {
-	if len(m.health) == 0 {
+	vis := m.visible()
+	if len(vis) == 0 {
 		return
 	}
 	if m.sel == nil {
-		m.sel = &selRef{mon: 0, check: lastCheck(m.health[0])}
+		m.sel = &selRef{mon: 0, check: lastCheck(vis[0])}
 		return
 	}
 	m.sel.check += d
 	m.clampSelection()
 }
 
-// clampSelection keeps sel within the current data bounds.
+// clampSelection keeps sel within the current (filtered) data bounds.
 func (m *model) clampSelection() {
 	if m.sel == nil {
 		return
 	}
-	if m.sel.mon >= len(m.health) {
+	vis := m.visible()
+	if m.sel.mon >= len(vis) {
 		m.sel = nil
 		return
 	}
-	shown := shownCount(m.health[m.sel.mon])
+	shown := shownCount(vis[m.sel.mon])
 	switch {
 	case shown == 0:
 		m.sel.check = 0
@@ -218,6 +266,7 @@ func (m model) View() string {
 		header += subtleStyle.Render(" · updated " + m.updated.Format("15:04:05"))
 	}
 
+	vis := m.visible()
 	var body string
 	switch {
 	case m.err != nil:
@@ -225,9 +274,11 @@ func (m model) View() string {
 			subtleStyle.Render("  (is it running?)")
 	case len(m.health) == 0:
 		body = subtleStyle.Render("loading…")
+	case len(vis) == 0:
+		body = subtleStyle.Render("no monitors match the filter")
 	default:
-		cards := make([]string, len(m.health))
-		for i, h := range m.health {
+		cards := make([]string, len(vis))
+		for i, h := range vis {
 			sel := -1
 			if m.sel != nil && m.sel.mon == i {
 				sel = m.sel.check
@@ -237,11 +288,37 @@ func (m model) View() string {
 		body = arrangeGrid(cards, m.width)
 	}
 
-	footer := helpStyle.Render("q quit · tab monitor · ←/→ check · r refresh")
+	footer := helpStyle.Render("q quit · / filter · tab monitor · ←/→ check · r refresh")
 	if hi, ok := m.detail(); ok {
 		footer = renderDetail(hi)
 	}
-	return header + "\n\n" + body + "\n\n" + footer
+	// Filter box sits above the grid (Gatus-style). Its height is fixed, so the
+	// body always starts at headerRows and checkAt stays valid.
+	return header + "\n\n" + m.filterBox() + "\n\n" + body + "\n\n" + footer
+}
+
+// filterBox renders the always-present, Gatus-style search box above the grid.
+// Gray when idle, accent when focused or holding a query.
+func (m model) filterBox() string {
+	w := m.width - 2 // account for the box border
+	if w < 24 {
+		w = 24
+	}
+
+	var content string
+	style := filterBoxStyle
+	switch {
+	case m.filtering:
+		style = filterBoxActiveStyle
+		content = filterLabelStyle.Render("⌕ ") + m.filter.View()
+	case m.filter.Value() != "":
+		style = filterBoxActiveStyle
+		content = filterLabelStyle.Render("⌕ ") + m.filter.Value() +
+			subtleStyle.Render("   (/ edit · esc clear)")
+	default:
+		content = subtleStyle.Render("⌕ press / to filter by name or url")
+	}
+	return style.Width(w).Render(content)
 }
 
 // detail resolves what the panel shows: the mouse hover takes precedence over
@@ -250,8 +327,9 @@ func (m model) detail() (hoverInfo, bool) {
 	if m.hover != nil {
 		return *m.hover, true
 	}
-	if m.sel != nil && m.sel.mon < len(m.health) {
-		h := m.health[m.sel.mon]
+	vis := m.visible()
+	if m.sel != nil && m.sel.mon < len(vis) {
+		h := vis[m.sel.mon]
 		if idx := barStart(h) + m.sel.check; idx >= 0 && idx < len(h.Recent) {
 			return hoverInfo{name: h.Name, check: h.Recent[idx]}, true
 		}
@@ -280,7 +358,8 @@ func lastCheck(h api.MonitorHealthDTO) int {
 // checkAt maps a mouse cell (x, y) to the check under it, mirroring the grid
 // layout. Returns ok=false when the cell is not over a status bar.
 func (m model) checkAt(x, y int) (string, api.CheckDTO, bool) {
-	if len(m.health) == 0 {
+	vis := m.visible()
+	if len(vis) == 0 {
 		return "", api.CheckDTO{}, false
 	}
 	cols := m.width / cardTotalW
@@ -300,11 +379,11 @@ func (m model) checkAt(x, y int) (string, api.CheckDTO, bool) {
 		return "", api.CheckDTO{}, false // in the border/padding, not a bar cell
 	}
 	mi := (by/cardTotalH)*cols + gridCol
-	if mi >= len(m.health) {
+	if mi >= len(vis) {
 		return "", api.CheckDTO{}, false
 	}
 
-	h := m.health[mi]
+	h := vis[mi]
 	if barIdx >= shownCount(h) {
 		return "", api.CheckDTO{}, false
 	}
@@ -447,7 +526,11 @@ const (
 	cardTotalH   = 6             // top border + 4 content lines + bottom border
 	barRowInCard = 3             // border + title + url, then the bar row
 	barColStart  = 2             // border + left padding before the first bar cell
-	headerRows   = 2             // header line + the blank line before the body
+
+	// headerRows is the fixed number of rows above the grid: the title line, a
+	// blank, the 3-row filter box, and a blank. Constant (the filter box is
+	// always drawn) so checkAt's y-math stays valid.
+	headerRows = 6
 )
 
 // ---- styles ----
@@ -468,6 +551,18 @@ var (
 
 	healthyBadge   = lipgloss.NewStyle().Foreground(green).Render("● healthy")
 	unhealthyBadge = lipgloss.NewStyle().Foreground(red).Render("● unhealthy")
+
+	filterLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(accent)
+
+	filterBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(gray).
+			Padding(0, 1)
+
+	filterBoxActiveStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(accent).
+				Padding(0, 1)
 
 	cardStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
