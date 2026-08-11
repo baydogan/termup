@@ -48,7 +48,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	p := tea.NewProgram(newModel(client, base), tea.WithAltScreen())
+	p := tea.NewProgram(newModel(client, base), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "termup:", err)
 		os.Exit(1)
@@ -81,6 +81,21 @@ type model struct {
 	updated time.Time
 	width   int
 	height  int
+	hover   *hoverInfo
+	sel     *selRef
+}
+
+// hoverInfo is the check the mouse is currently over, shown in the detail panel.
+type hoverInfo struct {
+	name  string
+	check api.CheckDTO
+}
+
+// selRef is the keyboard selection: a monitor and a displayed bar index within
+// it (0-based over the shown window). Persistent, unlike the transient hover.
+type selRef struct {
+	mon   int
+	check int
 }
 
 type dataMsg struct {
@@ -118,9 +133,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "r":
 			return m, m.fetch
+		case "tab":
+			m.moveMonitor(1)
+		case "shift+tab":
+			m.moveMonitor(-1)
+		case "right", "l":
+			m.moveCheck(1)
+		case "left", "h":
+			m.moveCheck(-1)
 		}
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+	case tea.MouseMsg:
+		if name, c, ok := m.checkAt(msg.X, msg.Y); ok {
+			m.hover = &hoverInfo{name: name, check: c}
+		} else {
+			m.hover = nil
+		}
+		return m, nil
 	case tickMsg:
 		return m, tea.Batch(m.fetch, tick())
 	case dataMsg:
@@ -128,9 +158,57 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err == nil {
 			m.health = msg.health
 			m.updated = msg.at
+			m.clampSelection() // history may have shifted under the selection
 		}
 	}
 	return m, nil
+}
+
+// ---- keyboard selection ----
+
+func (m *model) moveMonitor(d int) {
+	n := len(m.health)
+	if n == 0 {
+		return
+	}
+	if m.sel == nil {
+		m.sel = &selRef{mon: 0, check: lastCheck(m.health[0])}
+		return
+	}
+	m.sel.mon = (m.sel.mon + d%n + n) % n
+	m.clampSelection()
+}
+
+func (m *model) moveCheck(d int) {
+	if len(m.health) == 0 {
+		return
+	}
+	if m.sel == nil {
+		m.sel = &selRef{mon: 0, check: lastCheck(m.health[0])}
+		return
+	}
+	m.sel.check += d
+	m.clampSelection()
+}
+
+// clampSelection keeps sel within the current data bounds.
+func (m *model) clampSelection() {
+	if m.sel == nil {
+		return
+	}
+	if m.sel.mon >= len(m.health) {
+		m.sel = nil
+		return
+	}
+	shown := shownCount(m.health[m.sel.mon])
+	switch {
+	case shown == 0:
+		m.sel.check = 0
+	case m.sel.check >= shown:
+		m.sel.check = shown - 1
+	case m.sel.check < 0:
+		m.sel.check = 0
+	}
 }
 
 func (m model) View() string {
@@ -150,13 +228,102 @@ func (m model) View() string {
 	default:
 		cards := make([]string, len(m.health))
 		for i, h := range m.health {
-			cards[i] = renderCard(h)
+			sel := -1
+			if m.sel != nil && m.sel.mon == i {
+				sel = m.sel.check
+			}
+			cards[i] = renderCard(h, sel)
 		}
 		body = arrangeGrid(cards, m.width)
 	}
 
-	footer := helpStyle.Render("q quit · r refresh · auto every 10s")
+	footer := helpStyle.Render("q quit · tab monitor · ←/→ check · r refresh")
+	if hi, ok := m.detail(); ok {
+		footer = renderDetail(hi)
+	}
 	return header + "\n\n" + body + "\n\n" + footer
+}
+
+// detail resolves what the panel shows: the mouse hover takes precedence over
+// the persistent keyboard selection.
+func (m model) detail() (hoverInfo, bool) {
+	if m.hover != nil {
+		return *m.hover, true
+	}
+	if m.sel != nil && m.sel.mon < len(m.health) {
+		h := m.health[m.sel.mon]
+		if idx := barStart(h) + m.sel.check; idx >= 0 && idx < len(h.Recent) {
+			return hoverInfo{name: h.Name, check: h.Recent[idx]}, true
+		}
+	}
+	return hoverInfo{}, false
+}
+
+// barStart is the index of the first displayed bar within Recent (the bar only
+// shows the last barLen checks). shownCount is how many bars are displayed.
+func barStart(h api.MonitorHealthDTO) int {
+	if len(h.Recent) > barLen {
+		return len(h.Recent) - barLen
+	}
+	return 0
+}
+
+func shownCount(h api.MonitorHealthDTO) int { return len(h.Recent) - barStart(h) }
+
+func lastCheck(h api.MonitorHealthDTO) int {
+	if s := shownCount(h); s > 0 {
+		return s - 1
+	}
+	return 0
+}
+
+// checkAt maps a mouse cell (x, y) to the check under it, mirroring the grid
+// layout. Returns ok=false when the cell is not over a status bar.
+func (m model) checkAt(x, y int) (string, api.CheckDTO, bool) {
+	if len(m.health) == 0 {
+		return "", api.CheckDTO{}, false
+	}
+	cols := m.width / cardTotalW
+	if cols < 1 {
+		cols = 1
+	}
+	by := y - headerRows
+	if by < 0 || by%cardTotalH != barRowInCard {
+		return "", api.CheckDTO{}, false // not on a bar row
+	}
+	gridCol := x / cardTotalW
+	if gridCol >= cols {
+		return "", api.CheckDTO{}, false
+	}
+	barIdx := x%cardTotalW - barColStart
+	if barIdx < 0 {
+		return "", api.CheckDTO{}, false // in the border/padding, not a bar cell
+	}
+	mi := (by/cardTotalH)*cols + gridCol
+	if mi >= len(m.health) {
+		return "", api.CheckDTO{}, false
+	}
+
+	h := m.health[mi]
+	if barIdx >= shownCount(h) {
+		return "", api.CheckDTO{}, false
+	}
+	return h.Name, h.Recent[barStart(h)+barIdx], true
+}
+
+// renderDetail is the hover panel: one line describing a single check.
+func renderDetail(hi hoverInfo) string {
+	c := hi.check
+	state := healthyBadge
+	if !c.Up {
+		state = unhealthyBadge
+	}
+	ts := time.Unix(c.At, 0).Format("2006-01-02 15:04:05")
+	line := fmt.Sprintf("%s  %s · code %d · %dms", nameStyle.Render(hi.name), ts, c.StatusCode, c.LatencyMs)
+	if c.Error != "" {
+		line += " · " + errStyle.Render(c.Error)
+	}
+	return state + "  " + line
 }
 
 // arrangeGrid lays cards out in as many columns as fit the terminal width.
@@ -176,7 +343,7 @@ func arrangeGrid(cards []string, width int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-func renderCard(h api.MonitorHealthDTO) string {
+func renderCard(h api.MonitorHealthDTO, selIdx int) string {
 	badge := healthyBadge
 	if h.State != "up" {
 		badge = unhealthyBadge
@@ -203,16 +370,17 @@ func renderCard(h api.MonitorHealthDTO) string {
 		lipgloss.Left,
 		title,
 		subtleStyle.Render(truncate(h.URL, cardWidth)),
-		renderBar(h.Recent),
+		renderBar(h.Recent, selIdx),
 		stats,
 	)
 	return cardStyle.Render(body)
 }
 
-// renderBar draws one colored half-block bar per recent check (green up, red
-// down). Half-blocks pack tightly yet leave a thin gap, like the Gatus bars.
-// Only the most recent bars that fit the card are shown.
-func renderBar(recent []api.CheckDTO) string {
+// renderBar draws one colored block per recent check (green up, red down). The
+// keyboard-selected bar (selIdx, -1 if none) is a full block; the rest are
+// half-blocks that pack tightly like the Gatus bars. Only the most recent bars
+// that fit the card are shown.
+func renderBar(recent []api.CheckDTO, selIdx int) string {
 	if len(recent) == 0 {
 		return subtleStyle.Render("no data yet")
 	}
@@ -220,12 +388,16 @@ func renderBar(recent []api.CheckDTO) string {
 		recent = recent[len(recent)-barLen:]
 	}
 	var b strings.Builder
-	for _, c := range recent {
-		if c.Up {
-			b.WriteString(upBar)
-		} else {
-			b.WriteString(downBar)
+	for i, c := range recent {
+		glyph := "▌"
+		if i == selIdx {
+			glyph = "█"
 		}
+		color := green
+		if !c.Up {
+			color = red
+		}
+		b.WriteString(lipgloss.NewStyle().Foreground(color).Render(glyph))
 	}
 	return b.String()
 }
@@ -253,6 +425,21 @@ func getJSON(c *http.Client, url string, out any) error {
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
+// ---- layout ----
+//
+// The grid is drawn from these fixed dimensions; checkAt hit-tests against the
+// same numbers so a mouse cell maps back to a specific check.
+const (
+	cardWidth = 40 // card content width (inside the border)
+	barLen    = 34 // max bars shown per card (fits cardWidth)
+
+	cardTotalW   = cardWidth + 2 // + left/right border
+	cardTotalH   = 6             // top border + 4 content lines + bottom border
+	barRowInCard = 3             // border + title + url, then the bar row
+	barColStart  = 2             // border + left padding before the first bar cell
+	headerRows   = 2             // header line + the blank line before the body
+)
+
 // ---- styles ----
 
 var (
@@ -260,9 +447,6 @@ var (
 	red   = lipgloss.Color("196")
 	gray  = lipgloss.Color("240")
 	fg    = lipgloss.Color("252")
-
-	cardWidth = 40
-	barLen    = 34 // max bars shown per card (fits cardWidth)
 
 	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(fg)
 	nameStyle   = lipgloss.NewStyle().Bold(true).Foreground(fg)
@@ -272,9 +456,6 @@ var (
 
 	healthyBadge   = lipgloss.NewStyle().Foreground(green).Render("● healthy")
 	unhealthyBadge = lipgloss.NewStyle().Foreground(red).Render("● unhealthy")
-
-	upBar   = lipgloss.NewStyle().Foreground(green).Render("▌")
-	downBar = lipgloss.NewStyle().Foreground(red).Render("▌")
 
 	cardStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).

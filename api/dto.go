@@ -40,7 +40,9 @@ type MonitorHealthDTO struct {
 }
 
 type CheckDTO struct {
-	Up        bool  `json:"up"`
-	LatencyMs int64 `json:"latencyMs"`
-	At        int64 `json:"at"` // unix seconds
+	Up         bool   `json:"up"`
+	LatencyMs  int64  `json:"latencyMs"`
+	At         int64  `json:"at"` // unix seconds
+	StatusCode int    `json:"statusCode"`
+	Error      string `json:"error,omitempty"`
 }

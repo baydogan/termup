@@ -93,10 +93,16 @@ func buildHealth(m monitor.Monitor, hist []monitor.Result, state monitor.State) 
 		if isUp {
 			up++
 		}
+		var errStr string
+		if r.Err != nil {
+			errStr = r.Err.Error()
+		}
 		recent = append(recent, CheckDTO{
-			Up:        isUp,
-			LatencyMs: r.Latency.Milliseconds(),
-			At:        r.CheckedAt.Unix(),
+			Up:         isUp,
+			LatencyMs:  r.Latency.Milliseconds(),
+			At:         r.CheckedAt.Unix(),
+			StatusCode: r.StatusCode,
+			Error:      errStr,
 		})
 	}
 
