@@ -1,7 +1,36 @@
+# Manual test set — one case per line. (Endpoints verified reachable.)
+# Semantics: up = 2xx only. 3xx/4xx/5xx and no-response = down.
+# Cert is captured once the TLS handshake completes (regardless of status);
+# if the handshake fails (expired/self-signed) there is NO cert.
+#
+# name              expected state   cert?     what it tests
+# ----------------  --------------   -------   ------------------------------
+# up-2xx            up               cert Nd   2xx + valid certificate
+# up-http-nocert    up               none      plain HTTP up, no certificate
+# redirect-3xx      down             cert Nd   3xx down (redirect not followed)
+# client-4xx        down             cert Nd   4xx down
+# server-5xx        down             cert Nd   5xx down
+# blackhole-timeout down             none      probeTimeout exceeded (deadline)
+# conn-refused      down             none      connection refused
+# dns-fail          down             none      DNS does not resolve
+# tls-expired       down             none      TLS error (expired cert)
+
 monitors:
-  - name: google
-    url: https://google.com
-  - name: example
-    url: https://example.com
-  - name: github
-    url: https://github.com
+  - name: up-2xx
+    url: https://httpbingo.org/status/200
+  - name: up-http-nocert
+    url: http://example.com
+  - name: redirect-3xx
+    url: https://httpbingo.org/status/301
+  - name: client-4xx
+    url: https://postman-echo.com/status/404
+  - name: server-5xx
+    url: https://httpbingo.org/status/500
+  - name: blackhole-timeout
+    url: http://192.0.2.1/
+  - name: conn-refused
+    url: http://127.0.0.1:1
+  - name: dns-fail
+    url: http://does-not-exist.invalid
+  - name: tls-expired
+    url: https://expired.badssl.com/
