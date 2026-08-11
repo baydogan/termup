@@ -28,6 +28,7 @@ type Scheduler struct {
 	prober   probe.Prober
 	store    storage.Store
 	machine  *monitor.Machine
+	certs    *monitor.CertTracker
 	notifier notify.Notifier
 	clock    Clock
 	interval time.Duration
@@ -35,8 +36,8 @@ type Scheduler struct {
 	workers  int
 }
 
-func New(p probe.Prober, s storage.Store, m *monitor.Machine, n notify.Notifier, c Clock, interval, timeout time.Duration, workers int) *Scheduler {
-	return &Scheduler{prober: p, store: s, machine: m, notifier: n, clock: c, interval: interval, timeout: timeout, workers: workers}
+func New(p probe.Prober, s storage.Store, m *monitor.Machine, ct *monitor.CertTracker, n notify.Notifier, c Clock, interval, timeout time.Duration, workers int) *Scheduler {
+	return &Scheduler{prober: p, store: s, machine: m, certs: ct, notifier: n, clock: c, interval: interval, timeout: timeout, workers: workers}
 }
 
 func (s *Scheduler) Run(ctx context.Context) {
@@ -93,8 +94,33 @@ func (s *Scheduler) probeOne(ctx context.Context, m monitor.Monitor) {
 	// Feed the result into the state machine; a transition is alarm-worthy.
 	if t, ok := s.machine.Observe(res); ok {
 		log.Printf("state change %s: %s -> %s", t.Monitor, t.From, t.To)
-		if err := s.notifier.Notify(t); err != nil {
-			log.Printf("notify %s: %v", t.Monitor, err)
+		s.notify(notify.Event{
+			Kind:    notify.KindStateChange,
+			Monitor: t.Monitor,
+			From:    t.From,
+			To:      t.To,
+			Result:  t.Result,
+		})
+	}
+
+	// Cert expiry: scheduler owns the clock and computes days-left; the tracker
+	// decides whether this crossing warrants a one-shot alert.
+	if !res.CertExpiry.IsZero() {
+		daysLeft := int(res.CertExpiry.Sub(res.CheckedAt).Hours() / 24)
+		if s.certs.Observe(m.Name, daysLeft, true) {
+			log.Printf("cert expiring %s: %dd left", m.Name, daysLeft)
+			s.notify(notify.Event{
+				Kind:       notify.KindCertExpiring,
+				Monitor:    m.Name,
+				CertExpiry: res.CertExpiry,
+				DaysLeft:   daysLeft,
+			})
 		}
+	}
+}
+
+func (s *Scheduler) notify(e notify.Event) {
+	if err := s.notifier.Notify(e); err != nil {
+		log.Printf("notify %s: %v", e.Monitor, err)
 	}
 }

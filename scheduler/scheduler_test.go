@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/baydogan/termup/monitor"
+	"github.com/baydogan/termup/notify"
 	"github.com/baydogan/termup/storage"
 )
 
@@ -30,13 +31,13 @@ type fixedClock struct{}
 func (fixedClock) Now() time.Time                      { return time.Unix(0, 0) }
 func (fixedClock) Tick(time.Duration) <-chan time.Time { return nil }
 
-// recordingNotifier captures every transition it is asked to notify.
+// recordingNotifier captures every event it is asked to notify.
 type recordingNotifier struct {
-	got []monitor.Transition
+	got []notify.Event
 }
 
-func (n *recordingNotifier) Notify(t monitor.Transition) error {
-	n.got = append(n.got, t)
+func (n *recordingNotifier) Notify(e notify.Event) error {
+	n.got = append(n.got, e)
 	return nil
 }
 
@@ -44,7 +45,7 @@ func TestSchedulerNotifiesOnlyOnTransition(t *testing.T) {
 	store := storage.New(monitor.Monitor{Name: "x", URL: "http://x"})
 	prober := &scriptedProber{ups: []bool{false, false, false, true}}
 	notifier := &recordingNotifier{}
-	s := New(prober, store, monitor.NewMachine(), notifier, fixedClock{}, time.Second, time.Second, 1)
+	s := New(prober, store, monitor.NewMachine(), monitor.NewCertTracker(), notifier, fixedClock{}, time.Second, time.Second, 1)
 
 	ctx := context.Background()
 

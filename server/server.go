@@ -36,8 +36,9 @@ func Start() {
 	ln := initializeListener()
 	store := initializeStorage(cfg)
 	machine := monitor.NewMachine()
+	certs := monitor.NewCertTracker()
 	srv := initializeAPI(store, machine)
-	sched := initializeScheduler(store, machine)
+	sched := initializeScheduler(store, machine, certs)
 	run(srv, sched, store, ln)
 }
 
@@ -49,11 +50,11 @@ func loadConfig() *config.Config {
 	return cfg
 }
 
-func initializeScheduler(store storage.Store, machine *monitor.Machine) *scheduler.Scheduler {
+func initializeScheduler(store storage.Store, machine *monitor.Machine, certs *monitor.CertTracker) *scheduler.Scheduler {
 	prober := probe.NewHTTP(probeTimeout)
 	notifier := notify.NewStdout()
 	clock := scheduler.RealClock()
-	return scheduler.New(prober, store, machine, notifier, clock, probeInterval, probeTimeout, probeWorkers)
+	return scheduler.New(prober, store, machine, certs, notifier, clock, probeInterval, probeTimeout, probeWorkers)
 }
 
 func initializeStorage(cfg *config.Config) storage.Store {
