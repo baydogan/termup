@@ -344,13 +344,19 @@ func arrangeGrid(cards []string, width int) string {
 }
 
 func renderCard(h api.MonitorHealthDTO, selIdx int) string {
+	selected := selIdx >= 0 // selIdx is -1 only when this is not the active card
+
 	badge := healthyBadge
 	if h.State != "up" {
 		badge = unhealthyBadge
 	}
+	name := nameStyle
+	if selected {
+		name = selNameStyle
+	}
 	title := lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		nameStyle.Render(h.Name),
+		name.Render(h.Name),
 		"  ",
 		badge,
 	)
@@ -373,7 +379,11 @@ func renderCard(h api.MonitorHealthDTO, selIdx int) string {
 		renderBar(h.Recent, selIdx),
 		stats,
 	)
-	return cardStyle.Render(body)
+	style := cardStyle
+	if selected {
+		style = selectedCardStyle
+	}
+	return style.Render(body)
 }
 
 // renderBar draws one colored block per recent check (green up, red down). The
@@ -443,16 +453,18 @@ const (
 // ---- styles ----
 
 var (
-	green = lipgloss.Color("42")
-	red   = lipgloss.Color("196")
-	gray  = lipgloss.Color("240")
-	fg    = lipgloss.Color("252")
+	green  = lipgloss.Color("42")
+	red    = lipgloss.Color("196")
+	gray   = lipgloss.Color("240")
+	fg     = lipgloss.Color("252")
+	accent = lipgloss.Color("39") // selected card highlight
 
-	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(fg)
-	nameStyle   = lipgloss.NewStyle().Bold(true).Foreground(fg)
-	subtleStyle = lipgloss.NewStyle().Foreground(gray)
-	helpStyle   = lipgloss.NewStyle().Foreground(gray)
-	errStyle    = lipgloss.NewStyle().Bold(true).Foreground(red)
+	titleStyle   = lipgloss.NewStyle().Bold(true).Foreground(fg)
+	nameStyle    = lipgloss.NewStyle().Bold(true).Foreground(fg)
+	selNameStyle = lipgloss.NewStyle().Bold(true).Foreground(accent)
+	subtleStyle  = lipgloss.NewStyle().Foreground(gray)
+	helpStyle    = lipgloss.NewStyle().Foreground(gray)
+	errStyle     = lipgloss.NewStyle().Bold(true).Foreground(red)
 
 	healthyBadge   = lipgloss.NewStyle().Foreground(green).Render("● healthy")
 	unhealthyBadge = lipgloss.NewStyle().Foreground(red).Render("● unhealthy")
@@ -462,4 +474,12 @@ var (
 			BorderForeground(gray).
 			Padding(0, 1).
 			Width(cardWidth)
+
+	// selectedCardStyle marks the active card: a thick, accent-colored border.
+	// Still a single-cell border, so the grid layout (and hit-test) is unchanged.
+	selectedCardStyle = lipgloss.NewStyle().
+				Border(lipgloss.ThickBorder()).
+				BorderForeground(accent).
+				Padding(0, 1).
+				Width(cardWidth)
 )
