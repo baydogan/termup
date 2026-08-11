@@ -2,6 +2,7 @@ package notify_test
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 	"time"
 
@@ -25,6 +26,20 @@ func TestStdoutStateChangeFormat(t *testing.T) {
 	}
 
 	want := "[ALERT] local up -> down (code=500, 12ms)\n"
+	if got := buf.String(); got != want {
+		t.Errorf("output = %q, want %q", got, want)
+	}
+}
+
+func TestStdoutFlappingFormat(t *testing.T) {
+	var buf bytes.Buffer
+	n := notify.NewStdoutWriter(&buf)
+
+	if err := n.Notify(notify.Event{Kind: notify.KindFlapping, Monitor: "local", Flips: 6}); err != nil {
+		t.Fatalf("Notify: %v", err)
+	}
+
+	want := fmt.Sprintf("[FLAP] local flapping (6 flips in last %d)\n", monitor.FlapWindow)
 	if got := buf.String(); got != want {
 		t.Errorf("output = %q, want %q", got, want)
 	}

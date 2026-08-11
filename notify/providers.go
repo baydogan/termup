@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/baydogan/termup/monitor"
 )
 
 var (
@@ -37,6 +39,9 @@ func Message(e Event) string {
 	case KindCertExpiring:
 		return fmt.Sprintf("%s: certificate expires in %dd (%s)",
 			e.Monitor, e.DaysLeft, e.CertExpiry.Format("2006-01-02"))
+	case KindFlapping:
+		return fmt.Sprintf("%s: flapping (%d flips in last %d)",
+			e.Monitor, e.Flips, monitor.FlapWindow)
 	}
 	return ""
 }
@@ -86,6 +91,7 @@ type webhookPayload struct {
 	StatusCode int    `json:"statusCode,omitempty"`
 	CertExpiry int64  `json:"certExpiry,omitempty"`
 	DaysLeft   int    `json:"daysLeft,omitempty"`
+	Flips      int    `json:"flips,omitempty"`
 }
 
 func toPayload(e Event) webhookPayload {
@@ -102,6 +108,9 @@ func toPayload(e Event) webhookPayload {
 			p.CertExpiry = e.CertExpiry.Unix()
 		}
 		p.DaysLeft = e.DaysLeft
+	case KindFlapping:
+		p.Kind = "flapping"
+		p.Flips = e.Flips
 	}
 	return p
 }

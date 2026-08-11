@@ -45,7 +45,7 @@ func TestSchedulerNotifiesOnlyOnTransition(t *testing.T) {
 	store := storage.New(monitor.Monitor{Name: "x", URL: "http://x"})
 	prober := &scriptedProber{ups: []bool{false, false, false, true}}
 	notifier := &recordingNotifier{}
-	s := New(prober, store, monitor.NewMachine(), monitor.NewCertTracker(), notifier, fixedClock{}, time.Second, time.Second, 1)
+	s := New(prober, store, monitor.NewMachine(), monitor.NewCertTracker(), monitor.NewFlapTracker(), notifier, fixedClock{}, time.Second, time.Second, 1)
 
 	ctx := context.Background()
 

@@ -29,6 +29,7 @@ type Scheduler struct {
 	store    storage.Store
 	machine  *monitor.Machine
 	certs    *monitor.CertTracker
+	flaps    *monitor.FlapTracker
 	notifier notify.Notifier
 	clock    Clock
 	interval time.Duration
@@ -36,8 +37,8 @@ type Scheduler struct {
 	workers  int
 }
 
-func New(p probe.Prober, s storage.Store, m *monitor.Machine, ct *monitor.CertTracker, n notify.Notifier, c Clock, interval, timeout time.Duration, workers int) *Scheduler {
-	return &Scheduler{prober: p, store: s, machine: m, certs: ct, notifier: n, clock: c, interval: interval, timeout: timeout, workers: workers}
+func New(p probe.Prober, s storage.Store, m *monitor.Machine, ct *monitor.CertTracker, ft *monitor.FlapTracker, n notify.Notifier, c Clock, interval, timeout time.Duration, workers int) *Scheduler {
+	return &Scheduler{prober: p, store: s, machine: m, certs: ct, flaps: ft, notifier: n, clock: c, interval: interval, timeout: timeout, workers: workers}
 }
 
 func (s *Scheduler) Run(ctx context.Context) {
@@ -116,6 +117,13 @@ func (s *Scheduler) probeOne(ctx context.Context, m monitor.Monitor) {
 				DaysLeft:   daysLeft,
 			})
 		}
+	}
+
+	// Flapping: feed the raw up/down into the tracker; it fires once when the
+	// target starts oscillating (which the debounced machine would miss).
+	if flips, ok := s.flaps.Observe(m.Name, res.State() == monitor.StateUp); ok {
+		log.Printf("flapping %s: %d flips", m.Name, flips)
+		s.notify(notify.Event{Kind: notify.KindFlapping, Monitor: m.Name, Flips: flips})
 	}
 }
 

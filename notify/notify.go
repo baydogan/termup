@@ -12,10 +12,12 @@ type Kind int
 const (
 	KindStateChange  Kind = iota // up/down transition
 	KindCertExpiring             // TLS certificate nearing expiry
+	KindFlapping                 // target oscillating up/down
 )
 
 // Event is what the notifier reports on. Fields are populated per Kind:
-// StateChange uses From/To/Result; CertExpiring uses CertExpiry/DaysLeft.
+// StateChange uses From/To/Result; CertExpiring uses CertExpiry/DaysLeft;
+// Flapping uses Flips.
 type Event struct {
 	Kind    Kind
 	Monitor string
@@ -28,6 +30,9 @@ type Event struct {
 	// CertExpiring
 	CertExpiry time.Time
 	DaysLeft   int
+
+	// Flapping
+	Flips int
 }
 
 // Notifier is the outbound port for alerting. v0 has a single stdout adapter;

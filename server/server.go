@@ -37,9 +37,10 @@ func Start() {
 	store := initializeStorage(cfg)
 	machine := monitor.NewMachine()
 	certs := monitor.NewCertTracker()
+	flaps := monitor.NewFlapTracker()
 	notifier := initializeNotifier(cfg)
 	srv := initializeAPI(store, machine)
-	sched := initializeScheduler(store, machine, certs, notifier)
+	sched := initializeScheduler(store, machine, certs, flaps, notifier)
 	run(srv, sched, store, ln)
 }
 
@@ -51,10 +52,10 @@ func loadConfig() *config.Config {
 	return cfg
 }
 
-func initializeScheduler(store storage.Store, machine *monitor.Machine, certs *monitor.CertTracker, notifier notify.Notifier) *scheduler.Scheduler {
+func initializeScheduler(store storage.Store, machine *monitor.Machine, certs *monitor.CertTracker, flaps *monitor.FlapTracker, notifier notify.Notifier) *scheduler.Scheduler {
 	prober := probe.NewHTTP(probeTimeout)
 	clock := scheduler.RealClock()
-	return scheduler.New(prober, store, machine, certs, notifier, clock, probeInterval, probeTimeout, probeWorkers)
+	return scheduler.New(prober, store, machine, certs, flaps, notifier, clock, probeInterval, probeTimeout, probeWorkers)
 }
 
 // initializeNotifier builds the fan-out notifier: stdout is always on; provider

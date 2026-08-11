@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"time"
+
+	"github.com/baydogan/termup/monitor"
 )
 
 var _ Notifier = (*Stdout)(nil)
@@ -29,6 +31,9 @@ func (n *Stdout) Notify(e Event) error {
 	case KindCertExpiring:
 		_, err = fmt.Fprintf(n.w, "[CERT] %s certificate expires in %dd (%s)\n",
 			e.Monitor, e.DaysLeft, e.CertExpiry.Format("2006-01-02"))
+	case KindFlapping:
+		_, err = fmt.Fprintf(n.w, "[FLAP] %s flapping (%d flips in last %d)\n",
+			e.Monitor, e.Flips, monitor.FlapWindow)
 	}
 	return err
 }
