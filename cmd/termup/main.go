@@ -188,7 +188,16 @@ func renderCard(h api.MonitorHealthDTO) string {
 		badge,
 	)
 
-	stats := subtleStyle.Render(fmt.Sprintf("~%dms · uptime %.0f%%", h.LatencyMs, h.UptimePct))
+	statLine := fmt.Sprintf("~%dms · uptime %.0f%%", h.LatencyMs, h.UptimePct)
+	if h.CertExpiry > 0 {
+		days := int(time.Until(time.Unix(h.CertExpiry, 0)).Hours() / 24)
+		if days < 0 {
+			statLine += " · cert expired"
+		} else {
+			statLine += fmt.Sprintf(" · cert %dd", days)
+		}
+	}
+	stats := subtleStyle.Render(statLine)
 
 	body := lipgloss.JoinVertical(
 		lipgloss.Left,

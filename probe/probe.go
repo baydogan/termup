@@ -47,5 +47,10 @@ func (h *HTTP) Probe(ctx context.Context, m *monitor.Monitor) monitor.Result {
 	defer resp.Body.Close()
 	io.Copy(ioutil.Discard, resp.Body)
 
-	return monitor.Result{MonitorName: m.Name, Latency: time.Since(start), StatusCode: resp.StatusCode}
+	res := monitor.Result{MonitorName: m.Name, Latency: time.Since(start), StatusCode: resp.StatusCode}
+	// For HTTPS targets, surface the leaf certificate's expiry (NotAfter).
+	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
+		res.CertExpiry = resp.TLS.PeerCertificates[0].NotAfter
+	}
+	return res
 }

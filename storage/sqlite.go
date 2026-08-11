@@ -53,11 +53,18 @@ CREATE TABLE IF NOT EXISTS results (
 	status_code  INTEGER NOT NULL,
 	latency_ms   INTEGER NOT NULL,
 	err          TEXT NOT NULL DEFAULT '',
-	checked_at   INTEGER NOT NULL
+	checked_at   INTEGER NOT NULL,
+	cert_expiry  INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_results_monitor ON results(monitor_name, id);`
 	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("migrate: %w", err)
+	}
+	// Backfill the column for databases created before cert_expiry existed;
+	// a duplicate-column error just means it is already there.
+	if _, err := s.db.Exec(`ALTER TABLE results ADD COLUMN cert_expiry INTEGER NOT NULL DEFAULT 0`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("migrate cert_expiry: %w", err)
 	}
 	return nil
 }
@@ -82,7 +89,7 @@ func (s *SQLite) List() ([]monitor.Monitor, error) {
 
 func (s *SQLite) GetStatus(name string) (monitor.Status, error) {
 	row := s.db.QueryRow(
-		`SELECT status_code, latency_ms, err, checked_at FROM results
+		`SELECT status_code, latency_ms, err, checked_at, cert_expiry FROM results
 		 WHERE monitor_name = ? ORDER BY id DESC LIMIT 1`, name)
 	r, err := scanResult(row, name)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -97,8 +104,8 @@ func (s *SQLite) GetStatus(name string) (monitor.Status, error) {
 func (s *SQLite) History(name string) ([]monitor.Result, error) {
 	// take the last N by id, then return chronological (oldest -> newest)
 	rows, err := s.db.Query(
-		`SELECT status_code, latency_ms, err, checked_at FROM (
-			SELECT id, status_code, latency_ms, err, checked_at FROM results
+		`SELECT status_code, latency_ms, err, checked_at, cert_expiry FROM (
+			SELECT id, status_code, latency_ms, err, checked_at, cert_expiry FROM results
 			WHERE monitor_name = ? ORDER BY id DESC LIMIT ?
 		 ) ORDER BY id ASC`, name, historyLimit)
 	if err != nil {
@@ -122,10 +129,14 @@ func (s *SQLite) Save(r monitor.Result) error {
 	if r.Err != nil {
 		errStr = r.Err.Error()
 	}
+	var certExpiry int64
+	if !r.CertExpiry.IsZero() {
+		certExpiry = r.CertExpiry.Unix()
+	}
 	_, err := s.db.Exec(
-		`INSERT INTO results (monitor_name, status_code, latency_ms, err, checked_at)
-		 VALUES (?, ?, ?, ?, ?)`,
-		r.MonitorName, r.StatusCode, r.Latency.Milliseconds(), errStr, r.CheckedAt.Unix())
+		`INSERT INTO results (monitor_name, status_code, latency_ms, err, checked_at, cert_expiry)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		r.MonitorName, r.StatusCode, r.Latency.Milliseconds(), errStr, r.CheckedAt.Unix(), certExpiry)
 	if err != nil {
 		return fmt.Errorf("save result: %w", err)
 	}
@@ -179,12 +190,13 @@ type scanner interface{ Scan(...any) error }
 
 func scanResult(sc scanner, name string) (monitor.Result, error) {
 	var (
-		code    int
-		latMs   int64
-		errStr  string
-		checked int64
+		code     int
+		latMs    int64
+		errStr   string
+		checked  int64
+		certUnix int64
 	)
-	if err := sc.Scan(&code, &latMs, &errStr, &checked); err != nil {
+	if err := sc.Scan(&code, &latMs, &errStr, &checked, &certUnix); err != nil {
 		return monitor.Result{}, err
 	}
 	r := monitor.Result{
@@ -192,6 +204,9 @@ func scanResult(sc scanner, name string) (monitor.Result, error) {
 		StatusCode:  code,
 		Latency:     time.Duration(latMs) * time.Millisecond,
 		CheckedAt:   time.Unix(checked, 0),
+	}
+	if certUnix != 0 {
+		r.CertExpiry = time.Unix(certUnix, 0)
 	}
 	if errStr != "" {
 		r.Err = errors.New(errStr) // identity lost, but State() only checks Err != nil

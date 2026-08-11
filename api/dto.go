@@ -35,6 +35,8 @@ type MonitorHealthDTO struct {
 	LatencyMs int64      `json:"latencyMs"`
 	UptimePct float64    `json:"uptimePct"`
 	Recent    []CheckDTO `json:"recent"`
+	// CertExpiry is the TLS certificate NotAfter in unix seconds, 0 if none.
+	CertExpiry int64 `json:"certExpiry"`
 }
 
 type CheckDTO struct {

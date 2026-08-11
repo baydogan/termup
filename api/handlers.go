@@ -104,5 +104,8 @@ func buildHealth(m monitor.Monitor, hist []monitor.Result, state monitor.State) 
 	dto.LatencyMs = last.Latency.Milliseconds()
 	dto.UptimePct = float64(up) / float64(len(hist)) * 100
 	dto.Recent = recent
+	if !last.CertExpiry.IsZero() {
+		dto.CertExpiry = last.CertExpiry.Unix()
+	}
 	return dto
 }

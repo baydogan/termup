@@ -37,6 +37,9 @@ type Result struct {
 	Latency     time.Duration
 	Err         error
 	CheckedAt   time.Time
+	// CertExpiry is the TLS leaf certificate's NotAfter for HTTPS targets.
+	// Zero when the target is plain HTTP or the handshake never completed.
+	CertExpiry time.Time
 }
 
 func (r Result) State() State {
