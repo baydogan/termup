@@ -37,8 +37,9 @@ func Start() {
 	store := initializeStorage(cfg)
 	machine := monitor.NewMachine()
 	certs := monitor.NewCertTracker()
+	notifier := initializeNotifier(cfg)
 	srv := initializeAPI(store, machine)
-	sched := initializeScheduler(store, machine, certs)
+	sched := initializeScheduler(store, machine, certs, notifier)
 	run(srv, sched, store, ln)
 }
 
@@ -50,11 +51,25 @@ func loadConfig() *config.Config {
 	return cfg
 }
 
-func initializeScheduler(store storage.Store, machine *monitor.Machine, certs *monitor.CertTracker) *scheduler.Scheduler {
+func initializeScheduler(store storage.Store, machine *monitor.Machine, certs *monitor.CertTracker, notifier notify.Notifier) *scheduler.Scheduler {
 	prober := probe.NewHTTP(probeTimeout)
-	notifier := notify.NewStdout()
 	clock := scheduler.RealClock()
 	return scheduler.New(prober, store, machine, certs, notifier, clock, probeInterval, probeTimeout, probeWorkers)
+}
+
+// initializeNotifier builds the fan-out notifier: stdout is always on; provider
+// adapters from config are added on top. Notifiers are boot-time only (the
+// notifier section is not hot-reloaded).
+func initializeNotifier(cfg *config.Config) notify.Notifier {
+	notifiers := []notify.Notifier{notify.NewStdout()}
+	for _, nc := range cfg.Notifiers {
+		n, err := notify.Build(nc.Type, nc.URL)
+		if err != nil {
+			log.Fatalf("notifier config: %v", err)
+		}
+		notifiers = append(notifiers, n)
+	}
+	return notify.NewMulti(notifiers...)
 }
 
 func initializeStorage(cfg *config.Config) storage.Store {

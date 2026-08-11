@@ -9,11 +9,19 @@ import (
 )
 
 type Config struct {
-	Monitors []MonitorConfig `yaml:"monitors"`
+	Monitors  []MonitorConfig  `yaml:"monitors"`
+	Notifiers []NotifierConfig `yaml:"notifiers"`
 }
 
 type MonitorConfig struct {
 	Name string `yaml:"name"`
+	URL  string `yaml:"url"`
+}
+
+// NotifierConfig is an outbound alert target. Type validity is checked when the
+// adapter is built at boot; here we only require type and url to be present.
+type NotifierConfig struct {
+	Type string `yaml:"type"`
 	URL  string `yaml:"url"`
 }
 
@@ -49,6 +57,14 @@ func (c *Config) validate() error {
 			return fmt.Errorf("config: duplicate monitor name %q", m.Name)
 		}
 		seen[m.Name] = struct{}{}
+	}
+	for i, n := range c.Notifiers {
+		if n.Type == "" {
+			return fmt.Errorf("config: notifier #%d has empty type", i)
+		}
+		if n.URL == "" {
+			return fmt.Errorf("config: notifier %q has empty url", n.Type)
+		}
 	}
 	return nil
 }
