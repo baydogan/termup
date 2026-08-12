@@ -45,4 +45,9 @@ type CheckDTO struct {
 	At         int64  `json:"at"` // unix seconds
 	StatusCode int    `json:"statusCode"`
 	Error      string `json:"error,omitempty"`
+	// Stage timings (ms), 0 when not applicable.
+	DNSMs     int64 `json:"dnsMs"`
+	ConnectMs int64 `json:"connectMs"`
+	TLSMs     int64 `json:"tlsMs"`
+	TTFBMs    int64 `json:"ttfbMs"`
 }

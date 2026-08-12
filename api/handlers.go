@@ -103,6 +103,10 @@ func buildHealth(m monitor.Monitor, hist []monitor.Result, state monitor.State) 
 			At:         r.CheckedAt.Unix(),
 			StatusCode: r.StatusCode,
 			Error:      errStr,
+			DNSMs:      r.DNS.Milliseconds(),
+			ConnectMs:  r.Connect.Milliseconds(),
+			TLSMs:      r.TLS.Milliseconds(),
+			TTFBMs:     r.TTFB.Milliseconds(),
 		})
 	}
 

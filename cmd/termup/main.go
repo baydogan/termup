@@ -399,10 +399,30 @@ func renderDetail(hi hoverInfo) string {
 	}
 	ts := time.Unix(c.At, 0).Format("2006-01-02 15:04:05")
 	line := fmt.Sprintf("%s  %s · code %d · %dms", nameStyle.Render(hi.name), ts, c.StatusCode, c.LatencyMs)
+	if stages := renderStages(c); stages != "" {
+		line += subtleStyle.Render(stages)
+	}
 	if c.Error != "" {
 		line += " · " + errStyle.Render(c.Error)
 	}
 	return state + "  " + line
+}
+
+// renderStages formats the httptrace breakdown, skipping stages that are zero
+// (DNS for an IP, TLS for plain HTTP, etc.).
+func renderStages(c api.CheckDTO) string {
+	var b strings.Builder
+	for _, st := range []struct {
+		label string
+		ms    int64
+	}{
+		{"dns", c.DNSMs}, {"conn", c.ConnectMs}, {"tls", c.TLSMs}, {"ttfb", c.TTFBMs},
+	} {
+		if st.ms > 0 {
+			fmt.Fprintf(&b, " · %s %dms", st.label, st.ms)
+		}
+	}
+	return b.String()
 }
 
 // arrangeGrid lays cards out in as many columns as fit the terminal width.
