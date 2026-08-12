@@ -3,6 +3,10 @@
 *.md
 Makefile
 Dockerfile
+docker-compose.yml
 .dockerignore
 .DS_Store
 testdata
+bin
+*.db
+*.db-journal

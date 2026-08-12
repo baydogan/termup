@@ -1,14 +1,34 @@
-IMAGE := termup
-CONTAINER := termupd
+.PHONY: build test up down restart logs watch clean
 
-.PHONY: up down
+# Build both binaries locally (host use / CI).
+build:
+	go build -o bin/termupd ./cmd/termupd
+	go build -o bin/termup ./cmd/termup
 
-# Build the image and start a fresh container (detached).
+# Run the full test suite with the race detector.
+test:
+	go test ./... -race
+
+# Build the image and run the daemon continuously (detached, auto-restart).
 up:
-	docker build -t $(IMAGE) .
-	docker run -d --name $(CONTAINER) $(IMAGE)
+	docker compose up -d --build
 
-# Remove the old container and image.
+# Stop and remove the container (keeps the db volume; add -v to wipe it).
 down:
-	-docker rm -f $(CONTAINER)
-	-docker rmi $(IMAGE)
+	docker compose down
+
+# Reload after editing config.yaml (or any restart).
+restart:
+	docker compose restart termupd
+
+# Follow the daemon logs (probes, state changes, alerts).
+logs:
+	docker compose logs -f termupd
+
+# Attach the read-only dashboard to the running daemon (inside the container).
+watch:
+	docker compose exec termupd termup watch
+
+# Remove local build artifacts and the dev database.
+clean:
+	rm -rf bin termup.db termup.db-journal

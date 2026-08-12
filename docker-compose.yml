@@ -1,0 +1,14 @@
+services:
+  termupd:
+    build: .
+    image: termup
+    container_name: termupd
+    restart: unless-stopped
+    volumes:
+      # Target list: edit config.yaml on the host (read-only for the daemon).
+      - ./config.yaml:/data/config.yaml:ro
+      # Persist termup.db across restarts.
+      - termup-db:/data
+
+volumes:
+  termup-db:
