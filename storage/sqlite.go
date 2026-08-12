@@ -161,6 +161,13 @@ func (s *SQLite) Save(r monitor.Result) error {
 	return nil
 }
 
+func (s *SQLite) Prune(before time.Time) error {
+	if _, err := s.db.Exec(`DELETE FROM results WHERE checked_at < ?`, before.Unix()); err != nil {
+		return fmt.Errorf("prune results: %w", err)
+	}
+	return nil
+}
+
 func (s *SQLite) Sync(monitors []monitor.Monitor) error {
 	tx, err := s.db.Begin()
 	if err != nil {

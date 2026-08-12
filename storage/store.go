@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"time"
 
 	"github.com/baydogan/termup/monitor"
 )
@@ -22,4 +23,6 @@ type Store interface {
 type Writer interface {
 	Save(monitor.Result) error
 	Sync(monitors []monitor.Monitor) error
+	// Prune drops results checked before the given time (retention).
+	Prune(before time.Time) error
 }

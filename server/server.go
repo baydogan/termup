@@ -31,6 +31,11 @@ const (
 	probeWorkers  = 5
 )
 
+const (
+	retentionAge   = 30 * 24 * time.Hour // drop results older than this
+	retentionSweep = time.Hour           // how often the sweep runs
+)
+
 func Start() {
 	cfg := loadConfig()
 	ln := initializeListener()
@@ -102,11 +107,34 @@ func initializeAPI(store storage.Reader, machine *monitor.Machine) *api.API {
 	return api.New(store, machine)
 }
 
+// retentionLoop periodically drops results older than retentionAge. Runs once
+// at startup, then on retentionSweep ticks. Uses real time (coarse maintenance).
+func retentionLoop(ctx context.Context, store storage.Store) {
+	prune := func() {
+		if err := store.Prune(time.Now().Add(-retentionAge)); err != nil {
+			log.Printf("retention prune: %v", err)
+		}
+	}
+	prune()
+
+	t := time.NewTicker(retentionSweep)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			prune()
+		}
+	}
+}
+
 func run(srv *api.API, sched *scheduler.Scheduler, store storage.Store, ln net.Listener) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	go sched.Run(ctx)
+	go retentionLoop(ctx, store)
 
 	go func() {
 		err := config.Watch(ctx, configPath,

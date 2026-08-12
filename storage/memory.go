@@ -2,6 +2,7 @@ package storage
 
 import (
 	"sync"
+	"time"
 
 	"github.com/baydogan/termup/monitor"
 )
@@ -57,6 +58,26 @@ func (s *Memory) Save(r monitor.Result) error {
 		h = h[len(h)-historySize:]
 	}
 	s.history[r.MonitorName] = h
+	return nil
+}
+
+func (s *Memory) Prune(before time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for name, h := range s.history {
+		kept := h[:0]
+		for _, r := range h {
+			if !r.CheckedAt.Before(before) {
+				kept = append(kept, r)
+			}
+		}
+		if len(kept) == 0 {
+			delete(s.history, name)
+		} else {
+			s.history[name] = kept
+		}
+	}
 	return nil
 }
 
