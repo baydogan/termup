@@ -27,10 +27,6 @@ func (s State) String() string {
 	}
 }
 
-type Status struct {
-	State State
-}
-
 type Result struct {
 	MonitorName string
 	StatusCode  int

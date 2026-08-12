@@ -30,16 +30,6 @@ func (s *Memory) List() ([]monitor.Monitor, error) {
 	return out, nil
 }
 
-func (s *Memory) GetStatus(name string) (monitor.Status, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	h := s.history[name]
-	if len(h) == 0 {
-		return monitor.Status{}, ErrNotFound
-	}
-	return monitor.Status{State: h[len(h)-1].State()}, nil
-}
-
 func (s *Memory) History(name string) ([]monitor.Result, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

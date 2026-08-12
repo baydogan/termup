@@ -103,20 +103,6 @@ func (s *SQLite) List() ([]monitor.Monitor, error) {
 	return out, rows.Err()
 }
 
-func (s *SQLite) GetStatus(name string) (monitor.Status, error) {
-	row := s.db.QueryRow(
-		`SELECT `+resultCols+` FROM results
-		 WHERE monitor_name = ? ORDER BY id DESC LIMIT 1`, name)
-	r, err := scanResult(row, name)
-	if errors.Is(err, sql.ErrNoRows) {
-		return monitor.Status{}, ErrNotFound
-	}
-	if err != nil {
-		return monitor.Status{}, fmt.Errorf("get status: %w", err)
-	}
-	return monitor.Status{State: r.State()}, nil
-}
-
 func (s *SQLite) History(name string) ([]monitor.Result, error) {
 	// take the last N by id, then return chronological (oldest -> newest)
 	rows, err := s.db.Query(
