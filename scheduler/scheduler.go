@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"hash/fnv"
 	"log"
 	"sync"
 	"time"
@@ -15,12 +16,14 @@ import (
 type Clock interface {
 	Now() time.Time
 	Tick(d time.Duration) <-chan time.Time
+	After(d time.Duration) <-chan time.Time
 }
 
 type realClock struct{}
 
-func (realClock) Now() time.Time                        { return time.Now() }
-func (realClock) Tick(d time.Duration) <-chan time.Time { return time.Tick(d) }
+func (realClock) Now() time.Time                         { return time.Now() }
+func (realClock) Tick(d time.Duration) <-chan time.Time  { return time.Tick(d) }
+func (realClock) After(d time.Duration) <-chan time.Time { return time.After(d) }
 
 func RealClock() Clock { return realClock{} }
 
@@ -73,11 +76,39 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 		}()
 	}
 
+	// Jitter: dispatch each monitor after its deterministic phase offset so the
+	// batch spreads across the interval instead of firing all at once. The
+	// worker pool still caps concurrency.
+	var dispatch sync.WaitGroup
 	for _, m := range monitors {
-		jobs <- m
+		dispatch.Add(1)
+		go func(m monitor.Monitor) {
+			defer dispatch.Done()
+			select {
+			case <-ctx.Done():
+				return
+			case <-s.clock.After(s.offset(m.Name)):
+			}
+			select {
+			case <-ctx.Done():
+			case jobs <- m:
+			}
+		}(m)
 	}
+	dispatch.Wait()
 	close(jobs)
 	wg.Wait()
+}
+
+// offset is a monitor's stable phase within the interval, derived from its name
+// hash so the spread is deterministic (no RNG) and stable across restarts.
+func (s *Scheduler) offset(name string) time.Duration {
+	if s.interval <= 0 {
+		return 0
+	}
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(name))
+	return time.Duration(h.Sum64() % uint64(s.interval))
 }
 
 func (s *Scheduler) probeOne(ctx context.Context, m monitor.Monitor) {
