@@ -267,3 +267,54 @@ func TestSchedulerFiresFlapping(t *testing.T) {
 		t.Errorf("expected a flapping event after oscillation; got %+v", notifier.got)
 	}
 }
+
+// controllableClock lets the test drive ticks; After fires immediately so the
+// jittered dispatch inside runOnce doesn't actually wait.
+type controllableClock struct{ tick chan time.Time }
+
+func (c *controllableClock) Now() time.Time                      { return time.Unix(0, 0) }
+func (c *controllableClock) Tick(time.Duration) <-chan time.Time { return c.tick }
+func (c *controllableClock) After(time.Duration) <-chan time.Time {
+	ch := make(chan time.Time, 1)
+	ch <- time.Unix(0, 0)
+	return ch
+}
+
+func waitProbe(t *testing.T, ch <-chan string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatal("expected a probe within 1s")
+	}
+}
+
+func TestRunTicksThenStopsOnCancel(t *testing.T) {
+	store := storage.New(monitor.Monitor{Name: "x", URL: "http://x"})
+	probed := make(chan string, 16)
+	prober := proberFunc(func(m *monitor.Monitor) monitor.Result {
+		probed <- m.Name
+		return monitor.Result{MonitorName: m.Name, StatusCode: 200}
+	})
+	clk := &controllableClock{tick: make(chan time.Time)}
+	s := New(prober, store, monitor.NewMachine(), monitor.NewCertTracker(), monitor.NewFlapTracker(),
+		&recordingNotifier{}, clk, 30*time.Second, time.Second, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { s.Run(ctx); close(done) }()
+
+	// Run probes once immediately, then once per tick.
+	waitProbe(t, probed) // initial runOnce
+	clk.tick <- time.Unix(0, 0)
+	waitProbe(t, probed) // tick 1
+	clk.tick <- time.Unix(0, 0)
+	waitProbe(t, probed) // tick 2
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Run did not return after context cancel")
+	}
+}
