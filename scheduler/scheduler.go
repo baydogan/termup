@@ -3,7 +3,6 @@ package scheduler
 import (
 	"context"
 	"hash/fnv"
-	"log"
 	"sync"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/baydogan/termup/notify"
 	"github.com/baydogan/termup/probe"
 	"github.com/baydogan/termup/storage"
+	log "github.com/charmbracelet/log"
 )
 
 type Clock interface {
@@ -60,7 +60,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 func (s *Scheduler) runOnce(ctx context.Context) {
 	monitors, err := s.store.List()
 	if err != nil {
-		log.Printf("scheduler: list monitors: %v", err)
+		log.Error("list monitors", "err", err)
 		return
 	}
 
@@ -118,14 +118,15 @@ func (s *Scheduler) probeOne(ctx context.Context, m monitor.Monitor) {
 	res := s.prober.Probe(pctx, &m)
 	res.CheckedAt = s.clock.Now()
 	if err := s.store.Save(res); err != nil {
-		log.Printf("probe %s: save failed: %v", m.Name, err)
+		log.Error("save result", "monitor", m.Name, "err", err)
 	}
-	log.Printf("probe %-10s -> %-4s (code=%d, %s)",
-		m.Name, res.State(), res.StatusCode, res.Latency.Round(time.Millisecond))
+	log.Info("probe",
+		"monitor", m.Name, "state", res.State(), "code", res.StatusCode,
+		"latency", res.Latency.Round(time.Millisecond))
 
 	// Feed the result into the state machine; a transition is alarm-worthy.
+	// The notifier reports the transition (no duplicate log line here).
 	if t, ok := s.machine.Observe(res); ok {
-		log.Printf("state change %s: %s -> %s", t.Monitor, t.From, t.To)
 		s.notify(notify.Event{
 			Kind:    notify.KindStateChange,
 			Monitor: t.Monitor,
@@ -140,7 +141,6 @@ func (s *Scheduler) probeOne(ctx context.Context, m monitor.Monitor) {
 	if !res.CertExpiry.IsZero() {
 		daysLeft := int(res.CertExpiry.Sub(res.CheckedAt).Hours() / 24)
 		if s.certs.Observe(m.Name, daysLeft, true) {
-			log.Printf("cert expiring %s: %dd left", m.Name, daysLeft)
 			s.notify(notify.Event{
 				Kind:       notify.KindCertExpiring,
 				Monitor:    m.Name,
@@ -153,13 +153,12 @@ func (s *Scheduler) probeOne(ctx context.Context, m monitor.Monitor) {
 	// Flapping: feed the raw up/down into the tracker; it fires once when the
 	// target starts oscillating (which the debounced machine would miss).
 	if flips, ok := s.flaps.Observe(m.Name, res.State() == monitor.StateUp); ok {
-		log.Printf("flapping %s: %d flips", m.Name, flips)
 		s.notify(notify.Event{Kind: notify.KindFlapping, Monitor: m.Name, Flips: flips})
 	}
 }
 
 func (s *Scheduler) notify(e notify.Event) {
 	if err := s.notifier.Notify(e); err != nil {
-		log.Printf("notify %s: %v", e.Monitor, err)
+		log.Error("notify", "monitor", e.Monitor, "err", err)
 	}
 }

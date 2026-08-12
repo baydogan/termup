@@ -1,6 +1,6 @@
 package notify
 
-import "log"
+import "github.com/charmbracelet/log"
 
 var _ Notifier = (*Multi)(nil)
 
@@ -17,7 +17,7 @@ func NewMulti(children ...Notifier) *Multi {
 func (m *Multi) Notify(e Event) error {
 	for _, c := range m.children {
 		if err := c.Notify(e); err != nil {
-			log.Printf("notify: %v", err)
+			log.Error("notify child failed", "err", err)
 		}
 	}
 	return nil

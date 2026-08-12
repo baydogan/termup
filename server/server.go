@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -17,6 +16,8 @@ import (
 	"github.com/baydogan/termup/probe"
 	"github.com/baydogan/termup/scheduler"
 	"github.com/baydogan/termup/storage"
+	log "github.com/charmbracelet/log"
+	"github.com/muesli/termenv"
 )
 
 const socketPath = "/tmp/termupd.sock"
@@ -37,22 +38,37 @@ const (
 )
 
 func Start() {
+	logger := initLogger()
 	cfg := loadConfig()
 	ln := initializeListener()
 	store := initializeStorage(cfg)
 	machine := monitor.NewMachine()
 	certs := monitor.NewCertTracker()
 	flaps := monitor.NewFlapTracker()
-	notifier := initializeNotifier(cfg)
+	notifier := initializeNotifier(cfg, logger)
 	srv := initializeAPI(store, machine)
 	sched := initializeScheduler(store, machine, certs, flaps, notifier)
 	run(srv, sched, store, ln)
 }
 
+// initLogger configures the shared charmbracelet/log default logger: styled,
+// timestamped, colored (forced so `docker compose logs` renders it). Level is
+// info by default, overridable with LOG_LEVEL (e.g. debug).
+func initLogger() *log.Logger {
+	logger := log.Default()
+	logger.SetReportTimestamp(true)
+	logger.SetTimeFormat("15:04:05")
+	logger.SetColorProfile(termenv.ANSI256)
+	if lvl, err := log.ParseLevel(os.Getenv("LOG_LEVEL")); err == nil {
+		logger.SetLevel(lvl)
+	}
+	return logger
+}
+
 func loadConfig() *config.Config {
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		log.Fatalf("load config: %v", err)
+		log.Fatal("load config", "err", err)
 	}
 	return cfg
 }
@@ -66,12 +82,12 @@ func initializeScheduler(store storage.Store, machine *monitor.Machine, certs *m
 // initializeNotifier builds the fan-out notifier: stdout is always on; provider
 // adapters from config are added on top. Notifiers are boot-time only (the
 // notifier section is not hot-reloaded).
-func initializeNotifier(cfg *config.Config) notify.Notifier {
-	notifiers := []notify.Notifier{notify.NewStdout()}
+func initializeNotifier(cfg *config.Config, logger *log.Logger) notify.Notifier {
+	notifiers := []notify.Notifier{notify.NewStdout(logger)}
 	for _, nc := range cfg.Notifiers {
 		n, err := notify.Build(nc.Type, nc.URL)
 		if err != nil {
-			log.Fatalf("notifier config: %v", err)
+			log.Fatal("notifier config", "err", err)
 		}
 		notifiers = append(notifiers, n)
 	}
@@ -81,24 +97,24 @@ func initializeNotifier(cfg *config.Config) notify.Notifier {
 func initializeStorage(cfg *config.Config) storage.Store {
 	store, err := storage.NewSQLite(dbPath)
 	if err != nil {
-		log.Fatalf("open storage: %v", err)
+		log.Fatal("open storage", "err", err)
 	}
 	if err := store.Sync(cfg.ToMonitors()); err != nil {
-		log.Fatalf("seed storage: %v", err)
+		log.Fatal("seed storage", "err", err)
 	}
 	return store
 }
 
 func initializeListener() net.Listener {
 	if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		log.Fatalf("remove stale socket: %v", err)
+		log.Fatal("remove stale socket", "err", err)
 	}
 	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
-		log.Fatalf("listen unix socket: %v", err)
+		log.Fatal("listen unix socket", "err", err)
 	}
 	if err := os.Chmod(socketPath, 0o600); err != nil {
-		log.Fatalf("chmod socket: %v", err)
+		log.Fatal("chmod socket", "err", err)
 	}
 	return ln
 }
@@ -112,7 +128,7 @@ func initializeAPI(store storage.Reader, machine *monitor.Machine) *api.API {
 func retentionLoop(ctx context.Context, store storage.Store) {
 	prune := func() {
 		if err := store.Prune(time.Now().Add(-retentionAge)); err != nil {
-			log.Printf("retention prune: %v", err)
+			log.Error("retention prune", "err", err)
 		}
 	}
 	prune()
@@ -140,21 +156,21 @@ func run(srv *api.API, sched *scheduler.Scheduler, store storage.Store, ln net.L
 		err := config.Watch(ctx, configPath,
 			func(c *config.Config) {
 				if err := store.Sync(c.ToMonitors()); err != nil {
-					log.Printf("config reload: sync failed: %v", err)
+					log.Error("config reload: sync failed", "err", err)
 					return
 				}
-				log.Printf("config reloaded: %d monitors", len(c.Monitors))
+				log.Info("config reloaded", "monitors", len(c.Monitors))
 			},
 			func(err error) {
-				log.Printf("config reload skipped: %v", err) // previous list is kept
+				log.Warn("config reload skipped (keeping previous list)", "err", err)
 			},
 		)
 		if err != nil {
-			log.Printf("config watcher stopped: %v", err)
+			log.Warn("config watcher stopped", "err", err)
 		}
 	}()
 
-	log.Printf("termupd listening on unix socket %s", socketPath)
+	log.Info("termupd listening", "socket", socketPath)
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln) }()
@@ -162,15 +178,15 @@ func run(srv *api.API, sched *scheduler.Scheduler, store storage.Store, ln net.L
 	select {
 	case err := <-serveErr:
 		if err != nil {
-			log.Fatalf("server error: %v", err)
+			log.Fatal("server error", "err", err)
 		}
 	case <-ctx.Done():
-		log.Println("shutdown signal received, shutting down gracefully...")
+		log.Info("shutdown signal received, shutting down gracefully")
 		shCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shCtx); err != nil {
-			log.Printf("shutdown error: %v", err)
+			log.Error("shutdown error", "err", err)
 		}
-		log.Println("termupd stopped")
+		log.Info("termupd stopped")
 	}
 }

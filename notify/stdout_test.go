@@ -2,65 +2,62 @@ package notify_test
 
 import (
 	"bytes"
-	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/baydogan/termup/monitor"
 	"github.com/baydogan/termup/notify"
+	charmlog "github.com/charmbracelet/log"
 )
 
-func TestStdoutStateChangeFormat(t *testing.T) {
-	var buf bytes.Buffer
-	n := notify.NewStdoutWriter(&buf)
+// testStdout builds a Stdout notifier logging to buf with timestamps off, so
+// assertions are deterministic.
+func testStdout(buf *bytes.Buffer) *notify.Stdout {
+	l := charmlog.New(buf)
+	l.SetReportTimestamp(false)
+	return notify.NewStdout(l)
+}
 
-	e := notify.Event{
-		Kind:    notify.KindStateChange,
-		Monitor: "local",
-		From:    monitor.StateUp,
-		To:      monitor.StateDown,
-		Result:  monitor.Result{StatusCode: 500, Latency: 12 * time.Millisecond},
-	}
-	if err := n.Notify(e); err != nil {
-		t.Fatalf("Notify: %v", err)
-	}
-
-	want := "[ALERT] local up -> down (code=500, 12ms)\n"
-	if got := buf.String(); got != want {
-		t.Errorf("output = %q, want %q", got, want)
+func contains(t *testing.T, out string, wants ...string) {
+	t.Helper()
+	for _, w := range wants {
+		if !strings.Contains(out, w) {
+			t.Errorf("output %q missing %q", out, w)
+		}
 	}
 }
 
-func TestStdoutFlappingFormat(t *testing.T) {
+func TestStdoutStateChangeDownIsWarn(t *testing.T) {
 	var buf bytes.Buffer
-	n := notify.NewStdoutWriter(&buf)
-
-	if err := n.Notify(notify.Event{Kind: notify.KindFlapping, Monitor: "local", Flips: 6}); err != nil {
+	if err := testStdout(&buf).Notify(notify.Event{
+		Kind: notify.KindStateChange, Monitor: "local",
+		From: monitor.StateUp, To: monitor.StateDown, Result: monitor.Result{StatusCode: 500},
+	}); err != nil {
 		t.Fatalf("Notify: %v", err)
 	}
-
-	want := fmt.Sprintf("[FLAP] local flapping (6 flips in last %d)\n", monitor.FlapWindow)
-	if got := buf.String(); got != want {
-		t.Errorf("output = %q, want %q", got, want)
-	}
+	contains(t, buf.String(), "WARN", "state changed", "monitor=local", "from=up", "to=down", "code=500")
 }
 
-func TestStdoutCertExpiringFormat(t *testing.T) {
+func TestStdoutStateChangeRecoveryIsInfo(t *testing.T) {
 	var buf bytes.Buffer
-	n := notify.NewStdoutWriter(&buf)
+	testStdout(&buf).Notify(notify.Event{
+		Kind: notify.KindStateChange, Monitor: "x", From: monitor.StateDown, To: monitor.StateUp,
+	})
+	contains(t, buf.String(), "INFO", "to=up")
+}
 
-	e := notify.Event{
-		Kind:       notify.KindCertExpiring,
-		Monitor:    "local",
+func TestStdoutCertExpiring(t *testing.T) {
+	var buf bytes.Buffer
+	testStdout(&buf).Notify(notify.Event{
+		Kind: notify.KindCertExpiring, Monitor: "x", DaysLeft: 7,
 		CertExpiry: time.Date(2026, 10, 4, 0, 0, 0, 0, time.UTC),
-		DaysLeft:   7,
-	}
-	if err := n.Notify(e); err != nil {
-		t.Fatalf("Notify: %v", err)
-	}
+	})
+	contains(t, buf.String(), "WARN", "cert expiring", "days=7", "expiry=2026-10-04")
+}
 
-	want := "[CERT] local certificate expires in 7d (2026-10-04)\n"
-	if got := buf.String(); got != want {
-		t.Errorf("output = %q, want %q", got, want)
-	}
+func TestStdoutFlapping(t *testing.T) {
+	var buf bytes.Buffer
+	testStdout(&buf).Notify(notify.Event{Kind: notify.KindFlapping, Monitor: "x", Flips: 6})
+	contains(t, buf.String(), "WARN", "flapping", "flips=6")
 }

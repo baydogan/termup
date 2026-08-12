@@ -1,39 +1,34 @@
 package notify
 
 import (
-	"fmt"
-	"io"
-	"os"
-	"time"
-
 	"github.com/baydogan/termup/monitor"
+	"github.com/charmbracelet/log"
 )
 
 var _ Notifier = (*Stdout)(nil)
 
-// Stdout prints events to a writer (stdout by default). It is the v0 alerting
-// adapter.
+// Stdout reports events through a charmbracelet/log logger. It is the v0
+// alerting adapter; recoveries log at info, everything else at warn.
 type Stdout struct {
-	w io.Writer
+	log *log.Logger
 }
 
-func NewStdout() *Stdout { return &Stdout{w: os.Stdout} }
-
-// NewStdoutWriter builds a Stdout notifier over an arbitrary writer (used in tests).
-func NewStdoutWriter(w io.Writer) *Stdout { return &Stdout{w: w} }
+func NewStdout(l *log.Logger) *Stdout { return &Stdout{log: l} }
 
 func (n *Stdout) Notify(e Event) error {
-	var err error
 	switch e.Kind {
 	case KindStateChange:
-		_, err = fmt.Fprintf(n.w, "[ALERT] %s %s -> %s (code=%d, %s)\n",
-			e.Monitor, e.From, e.To, e.Result.StatusCode, e.Result.Latency.Round(time.Millisecond))
+		fields := []any{"monitor", e.Monitor, "from", e.From, "to", e.To, "code", e.Result.StatusCode}
+		if e.To == monitor.StateDown {
+			n.log.Warn("state changed", fields...)
+		} else {
+			n.log.Info("state changed", fields...)
+		}
 	case KindCertExpiring:
-		_, err = fmt.Fprintf(n.w, "[CERT] %s certificate expires in %dd (%s)\n",
-			e.Monitor, e.DaysLeft, e.CertExpiry.Format("2006-01-02"))
+		n.log.Warn("cert expiring",
+			"monitor", e.Monitor, "days", e.DaysLeft, "expiry", e.CertExpiry.Format("2006-01-02"))
 	case KindFlapping:
-		_, err = fmt.Fprintf(n.w, "[FLAP] %s flapping (%d flips in last %d)\n",
-			e.Monitor, e.Flips, monitor.FlapWindow)
+		n.log.Warn("flapping", "monitor", e.Monitor, "flips", e.Flips, "window", monitor.FlapWindow)
 	}
-	return err
+	return nil
 }
