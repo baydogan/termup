@@ -34,3 +34,19 @@ monitors:
     url: http://does-not-exist.invalid
   - name: tls-expired
     url: https://expired.badssl.com/
+  - name: healthy-200
+    url: https://httpbin.org/status/200
+  - name: always-500
+    url: https://httpbin.org/status/500
+  - name: always-503
+    url: https://httpbin.org/status/503
+  - name: slow-3s
+    url: https://httpbin.org/delay/3
+  - name: slow-tolerant
+    url: https://httpbin.org/delay/3
+  - name: flapping-random
+    url: https://httpbin.org/status/200,500,503
+  - name: body-check
+    url: https://httpbin.org/json
+  - name: header-check
+    url: https://httpbin.org/response-headers?X-Test=zerotolerance
