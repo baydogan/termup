@@ -10,8 +10,9 @@ RUN CGO_ENABLED=0 go build -o /out/termupd ./cmd/termupd \
 
 # ---- run stage ----
 FROM alpine:3.20
-# CA certs are required to verify targets' TLS certificates when probing HTTPS.
-RUN apk add --no-cache ca-certificates
+# ca-certificates: verify targets' TLS certs when probing HTTPS.
+# tzdata: so the CLI can render timestamps in the configured TZ (else UTC).
+RUN apk add --no-cache ca-certificates tzdata
 COPY --from=build /out/termupd /out/termup /usr/local/bin/
 # Working dir holds config.yaml (mounted) and termup.db (persisted volume).
 WORKDIR /data

@@ -4,6 +4,9 @@ services:
     image: termup
     container_name: termupd
     restart: unless-stopped
+    environment:
+      # Render CLI timestamps in local time; change to your zone.
+      - TZ=Europe/Istanbul
     volumes:
       # Target list: edit config.yaml on the host (read-only for the daemon).
       - ./config.yaml:/data/config.yaml:ro
