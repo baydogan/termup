@@ -36,9 +36,14 @@ func NewMachine() *Machine {
 }
 
 // Observe processes one probe result and returns the transition when State
-// changed (changed=true). Rules: up->down = FailThreshold consecutive fails;
-// down->up = a single 2xx. Unknown is the initial state: a single 2xx -> up,
-// FailThreshold fails -> down.
+// changed *and* the change is worth alarming on (changed=true). Rules:
+// up->down = FailThreshold consecutive fails; down->up = a single 2xx. Unknown
+// is the initial state: a single 2xx -> up, FailThreshold fails -> down.
+//
+// unknown->up is silent (decision: 2026-08-13): the machine is process-local, so
+// every restart re-derives State from Unknown and would otherwise alarm for
+// every healthy target. State still becomes Up — only the alert is dropped.
+// unknown->down stays loud: a target that is down at startup is news.
 func (m *Machine) Observe(r Result) (Transition, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -61,6 +66,9 @@ func (m *Machine) Observe(r Result) (Transition, bool) {
 
 	if t.state == from {
 		return Transition{}, false
+	}
+	if from == StateUnknown && t.state == StateUp {
+		return Transition{}, false // first observation of a healthy target: not an alarm
 	}
 	return Transition{Monitor: r.MonitorName, From: from, To: t.state, Result: r}, true
 }

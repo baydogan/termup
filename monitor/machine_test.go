@@ -21,7 +21,7 @@ type transition struct {
 }
 
 // feed runs a sequence of up/down probes through the machine and returns every
-// transition it emitted, in order.
+// alarm-worthy transition it emitted, in order.
 func feed(m *monitor.Machine, name string, ups ...bool) []transition {
 	var got []transition
 	for _, up := range ups {
@@ -57,15 +57,17 @@ func TestMachine(t *testing.T) {
 			final: monitor.StateDown,
 		},
 		{
-			name:  "single 2xx flips to up",
+			// Restart noise (2026-08-13): the first 2xx moves State to up but
+			// must not alarm, since every restart starts from unknown.
+			name:  "single 2xx flips to up silently",
 			ups:   []bool{up},
-			want:  []transition{{monitor.StateUnknown, monitor.StateUp}},
+			want:  nil,
 			final: monitor.StateUp,
 		},
 		{
 			name:  "success resets the fail streak",
 			ups:   []bool{down, down, up, down, down},
-			want:  []transition{{monitor.StateUnknown, monitor.StateUp}},
+			want:  nil,
 			final: monitor.StateUp,
 		},
 		{
@@ -75,9 +77,10 @@ func TestMachine(t *testing.T) {
 			final: monitor.StateUp,
 		},
 		{
+			// The silent unknown->up does not swallow the later real transition.
 			name:  "up then three fails flips down",
 			ups:   []bool{up, down, down, down},
-			want:  []transition{{monitor.StateUnknown, monitor.StateUp}, {monitor.StateUp, monitor.StateDown}},
+			want:  []transition{{monitor.StateUp, monitor.StateDown}},
 			final: monitor.StateDown,
 		},
 		{
@@ -85,7 +88,7 @@ func TestMachine(t *testing.T) {
 			// threshold never reaches down, so it never alarms.
 			name:  "sub-threshold flapping never goes down",
 			ups:   []bool{down, down, up, down, down, up},
-			want:  []transition{{monitor.StateUnknown, monitor.StateUp}},
+			want:  nil,
 			final: monitor.StateUp,
 		},
 	}
