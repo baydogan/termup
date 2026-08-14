@@ -116,6 +116,12 @@ func TestInitializeNotifierFansOutToConfiguredProviders(t *testing.T) {
 	if err := n.Notify(notify.Event{Kind: notify.KindStateChange, Monitor: "a", To: monitor.StateDown}); err != nil {
 		t.Fatalf("notify: %v", err)
 	}
+	// Delivery is asynchronous now; the drain on Close is what makes it observable.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := n.Close(ctx); err != nil {
+		t.Fatalf("close: %v", err)
+	}
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -133,6 +139,11 @@ func TestInitializeNotifierWithoutConfigIsStdoutOnly(t *testing.T) {
 	n := initializeNotifier(&config.Config{}, log.New(io.Discard))
 	if err := n.Notify(notify.Event{Kind: notify.KindFlapping, Monitor: "a", Flips: 6}); err != nil {
 		t.Fatalf("notify: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := n.Close(ctx); err != nil {
+		t.Fatalf("close: %v", err)
 	}
 }
 
@@ -370,7 +381,11 @@ func TestRunServesThenShutsDownOnSignal(t *testing.T) {
 	ln, sock := unixSocket(t)
 
 	done := make(chan struct{})
-	go func() { run(api.New(store, monitor.NewMachine()), testScheduler(store), store, ln); close(done) }()
+	notifier := notify.NewAsync(notify.NewStdout(log.New(io.Discard)), notifyQueueSize)
+	go func() {
+		run(api.New(store, monitor.NewMachine()), testScheduler(store), store, notifier, ln)
+		close(done)
+	}()
 
 	waitForAPI(t, sock)
 
@@ -414,7 +429,11 @@ func TestRunKeepsServingWhenReloadSyncFails(t *testing.T) {
 	ln, sock := unixSocket(t)
 
 	done := make(chan struct{})
-	go func() { run(api.New(store, monitor.NewMachine()), testScheduler(store), store, ln); close(done) }()
+	notifier := notify.NewAsync(notify.NewStdout(log.New(io.Discard)), notifyQueueSize)
+	go func() {
+		run(api.New(store, monitor.NewMachine()), testScheduler(store), store, notifier, ln)
+		close(done)
+	}()
 
 	waitForAPI(t, sock)
 

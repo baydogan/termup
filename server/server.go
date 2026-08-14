@@ -37,6 +37,15 @@ const (
 	retentionSweep = time.Hour           // how often the sweep runs
 )
 
+const (
+	// notifyQueueSize is how many pending alerts the async notifier holds before
+	// it starts dropping them (probing never waits on alerting).
+	notifyQueueSize = 256
+	// notifyDrainTimeout bounds the shutdown drain so termupd cannot hang behind
+	// a slow provider.
+	notifyDrainTimeout = 5 * time.Second
+)
+
 func Start() {
 	logger := initLogger()
 	cfg := loadConfig()
@@ -48,7 +57,7 @@ func Start() {
 	notifier := initializeNotifier(cfg, logger)
 	srv := initializeAPI(store, machine)
 	sched := initializeScheduler(store, machine, certs, flaps, notifier)
-	run(srv, sched, store, ln)
+	run(srv, sched, store, notifier, ln)
 }
 
 // initLogger configures the shared charmbracelet/log default logger: styled,
@@ -81,8 +90,10 @@ func initializeScheduler(store storage.Store, machine *monitor.Machine, certs *m
 
 // initializeNotifier builds the fan-out notifier: stdout is always on; provider
 // adapters from config are added on top. Notifiers are boot-time only (the
-// notifier section is not hot-reloaded).
-func initializeNotifier(cfg *config.Config, logger *log.Logger) notify.Notifier {
+// notifier section is not hot-reloaded). The whole chain is wrapped in
+// notify.Async so a slow provider can never stall a probe worker; the caller
+// must Close it to drain on shutdown.
+func initializeNotifier(cfg *config.Config, logger *log.Logger) *notify.Async {
 	notifiers := []notify.Notifier{notify.NewStdout(logger)}
 	for _, nc := range cfg.Notifiers {
 		n, err := notify.Build(nc.Type, nc.URL)
@@ -91,7 +102,7 @@ func initializeNotifier(cfg *config.Config, logger *log.Logger) notify.Notifier 
 		}
 		notifiers = append(notifiers, n)
 	}
-	return notify.NewMulti(notifiers...)
+	return notify.NewAsync(notify.NewMulti(notifiers...), notifyQueueSize)
 }
 
 func initializeStorage(cfg *config.Config) storage.Store {
@@ -145,7 +156,7 @@ func retentionLoop(ctx context.Context, store storage.Store) {
 	}
 }
 
-func run(srv *api.API, sched *scheduler.Scheduler, store storage.Store, ln net.Listener) {
+func run(srv *api.API, sched *scheduler.Scheduler, store storage.Store, notifier *notify.Async, ln net.Listener) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -186,6 +197,13 @@ func run(srv *api.API, sched *scheduler.Scheduler, store storage.Store, ln net.L
 		defer cancel()
 		if err := srv.Shutdown(shCtx); err != nil {
 			log.Error("shutdown error", "err", err)
+		}
+		// Deliver the alerts still queued. Bounded: a stuck provider must not
+		// hold the process open.
+		drainCtx, cancelDrain := context.WithTimeout(context.Background(), notifyDrainTimeout)
+		defer cancelDrain()
+		if err := notifier.Close(drainCtx); err != nil {
+			log.Warn("notifier drain", "err", err)
 		}
 		log.Info("termupd stopped")
 	}
