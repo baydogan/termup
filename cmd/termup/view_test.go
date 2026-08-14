@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/baydogan/termup/api"
+	"github.com/baydogan/termup/cmd/termup/style"
 )
 
 func TestBadgeFor(t *testing.T) {
@@ -12,10 +13,10 @@ func TestBadgeFor(t *testing.T) {
 		state string
 		want  string
 	}{
-		{"up", healthyBadge},
-		{"down", unhealthyBadge},
-		{"unknown", unknownBadge},
-		{"", unknownBadge}, // no state on the wire is not a healthy target either
+		{"up", style.HealthyBadge},
+		{"down", style.UnhealthyBadge},
+		{"unknown", style.UnknownBadge},
+		{"", style.UnknownBadge}, // no state on the wire is not a healthy target either
 	}
 	for _, tc := range cases {
 		t.Run(tc.state, func(t *testing.T) {

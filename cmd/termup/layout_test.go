@@ -1,9 +1,11 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/baydogan/termup/api"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // recentN builds n checks whose StatusCode equals their index, so a test can
@@ -64,5 +66,52 @@ func TestCheckAt(t *testing.T) {
 				t.Errorf("got (%q, status %d), want (%q, status %d)", name, c.StatusCode, tc.wantMon, tc.wantStatus)
 			}
 		})
+	}
+}
+
+// TestCardDimensionsMatchLayoutConstants pins the contract between the renderer
+// and checkAt: the hit-test derives a check from a mouse cell using cardTotalW /
+// cardTotalH / barRowInCard, so a card whose real size drifts from them would
+// silently misroute clicks.
+func TestCardDimensionsMatchLayoutConstants(t *testing.T) {
+	h := api.MonitorHealthDTO{Name: "m", URL: "http://m.example", State: "up", Recent: recentN(5)}
+
+	for _, tc := range []struct {
+		name   string
+		selIdx int
+	}{
+		{"plain", -1},
+		{"selected", 0}, // thick border, must keep the same footprint
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			card := renderCard(h, tc.selIdx)
+			if w := lipgloss.Width(card); w != cardTotalW {
+				t.Errorf("card width = %d, want cardTotalW = %d", w, cardTotalW)
+			}
+			if hh := lipgloss.Height(card); hh != cardTotalH {
+				t.Errorf("card height = %d, want cardTotalH = %d", hh, cardTotalH)
+			}
+			lines := strings.Split(card, "\n")
+			if !strings.Contains(lines[barRowInCard], "▌") && !strings.Contains(lines[barRowInCard], "█") {
+				t.Errorf("row %d is not the bar row:\n%s", barRowInCard, card)
+			}
+		})
+	}
+}
+
+// TestGridColsIsSharedByRendererAndHitTest guards the other half of that
+// contract: both sides must compute the same column count.
+func TestGridColsIsSharedByRendererAndHitTest(t *testing.T) {
+	cards := []string{"a", "b", "c"}
+	for _, width := range []int{0, 1, cardTotalW - 1, cardTotalW, 3 * cardTotalW, 500} {
+		cols := gridCols(width)
+		if cols < 1 {
+			t.Errorf("gridCols(%d) = %d, want at least 1", width, cols)
+		}
+		rows := strings.Count(arrangeGrid(cards, width), "\n") + 1
+		wantRows := (len(cards) + cols - 1) / cols
+		if rows != wantRows {
+			t.Errorf("width %d: grid has %d rows, want %d (cols=%d)", width, rows, wantRows, cols)
+		}
 	}
 }
