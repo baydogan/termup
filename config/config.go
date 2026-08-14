@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/baydogan/termup/monitor"
@@ -53,6 +54,9 @@ func (c *Config) validate() error {
 		if m.URL == "" {
 			return fmt.Errorf("config: monitor %q has empty url", m.Name)
 		}
+		if err := validateURL(m.URL); err != nil {
+			return fmt.Errorf("config: monitor %q has invalid url %q: %w", m.Name, m.URL, err)
+		}
 		if _, dup := seen[m.Name]; dup {
 			return fmt.Errorf("config: duplicate monitor name %q", m.Name)
 		}
@@ -65,6 +69,23 @@ func (c *Config) validate() error {
 		if n.URL == "" {
 			return fmt.Errorf("config: notifier %q has empty url", n.Type)
 		}
+	}
+	return nil
+}
+
+// validateURL requires what the HTTP prober can actually probe: an absolute
+// http(s) URL with a host. Caught here, at load time, instead of failing every
+// probe cycle forever. Widens when non-HTTP probers arrive (tcp://, dns://).
+func validateURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("not a url: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("scheme must be http or https, got %q", u.Scheme)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("missing host")
 	}
 	return nil
 }
