@@ -445,10 +445,7 @@ func arrangeGrid(cards []string, width int) string {
 func renderCard(h api.MonitorHealthDTO, selIdx int) string {
 	selected := selIdx >= 0 // selIdx is -1 only when this is not the active card
 
-	badge := healthyBadge
-	if h.State != "up" {
-		badge = unhealthyBadge
-	}
+	badge := badgeFor(h.State)
 	name := nameStyle
 	if selected {
 		name = selNameStyle
@@ -483,6 +480,20 @@ func renderCard(h api.MonitorHealthDTO, selIdx int) string {
 		style = selectedCardStyle
 	}
 	return style.Render(body)
+}
+
+// badgeFor maps the monitor's wire state to its badge. unknown is its own badge:
+// a target that has never been confirmed (fresh start, or failing but still under
+// the fail threshold) is not the same as a confirmed down one.
+func badgeFor(state string) string {
+	switch state {
+	case "up":
+		return healthyBadge
+	case "down":
+		return unhealthyBadge
+	default:
+		return unknownBadge
+	}
 }
 
 // renderBar draws one colored block per recent check (green up, red down). The
@@ -571,6 +582,8 @@ var (
 
 	healthyBadge   = lipgloss.NewStyle().Foreground(green).Render("● healthy")
 	unhealthyBadge = lipgloss.NewStyle().Foreground(red).Render("● unhealthy")
+	// Gray, not red: unknown means "not confirmed yet", not "down".
+	unknownBadge = lipgloss.NewStyle().Foreground(gray).Render("● unknown")
 
 	filterLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(accent)
 
