@@ -476,3 +476,79 @@ func TestStart(t *testing.T) {
 	waitForAPI(t, socketPath)
 	sigterm(t, done)
 }
+
+// closeTrackingStore records the store lifecycle: how often Close ran and
+// whether any write arrived after it.
+type closeTrackingStore struct {
+	storage.Store
+	mu               sync.Mutex
+	closes           int
+	writes           int
+	writesAfterClose int
+}
+
+func (s *closeTrackingStore) write() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.writes++
+	if s.closes > 0 {
+		s.writesAfterClose++
+		return false
+	}
+	return true
+}
+
+func (s *closeTrackingStore) Save(r monitor.Result) error {
+	s.write()
+	return s.Store.Save(r)
+}
+
+func (s *closeTrackingStore) Sync(ms []monitor.Monitor) error {
+	s.write()
+	return s.Store.Sync(ms)
+}
+
+func (s *closeTrackingStore) Prune(before time.Time) error {
+	s.write()
+	return s.Store.Prune(before)
+}
+
+func (s *closeTrackingStore) Close() error {
+	s.mu.Lock()
+	s.closes++
+	s.mu.Unlock()
+	return s.Store.Close()
+}
+
+// TestRunClosesStoreAfterWritersStop pins the shutdown order: the store is
+// closed once, and only after the scheduler, the retention sweep and the config
+// watcher have stopped writing to it.
+func TestRunClosesStoreAfterWritersStop(t *testing.T) {
+	writeConfig(t, oneMonitor)
+
+	store := &closeTrackingStore{Store: storage.New()}
+	ln, sock := unixSocket(t)
+	notifier := notify.NewAsync(notify.NewStdout(log.New(io.Discard)), notifyQueueSize)
+
+	done := make(chan struct{})
+	go func() {
+		run(api.New(store, monitor.NewMachine()), testScheduler(store), store, notifier, ln)
+		close(done)
+	}()
+
+	waitForAPI(t, sock)
+	// The retention sweep writes at startup, so there is a real writer to outlive.
+	sigterm(t, done)
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.closes != 1 {
+		t.Errorf("Close called %d times, want exactly 1", store.closes)
+	}
+	if store.writes == 0 {
+		t.Error("no writes recorded; the test cannot prove the ordering")
+	}
+	if store.writesAfterClose != 0 {
+		t.Errorf("%d writes arrived after Close", store.writesAfterClose)
+	}
+}

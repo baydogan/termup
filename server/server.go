@@ -44,6 +44,9 @@ const (
 	// notifyDrainTimeout bounds the shutdown drain so termupd cannot hang behind
 	// a slow provider.
 	notifyDrainTimeout = 5 * time.Second
+	// workerStopTimeout is how long shutdown waits for each store writer
+	// (scheduler, retention sweep, config watcher) to return.
+	workerStopTimeout = 5 * time.Second
 )
 
 func Start() {
@@ -156,30 +159,56 @@ func retentionLoop(ctx context.Context, store storage.Store) {
 	}
 }
 
+// start runs fn in a goroutine and returns a channel that closes when it returns.
+func start(fn func()) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn()
+	}()
+	return done
+}
+
+// waitFor blocks until a shutdown worker signals it is done, or until the grace
+// period runs out. A worker that overstays is reported and left behind: the
+// process is going down either way.
+func waitFor(what string, done <-chan struct{}) {
+	select {
+	case <-done:
+	case <-time.After(workerStopTimeout):
+		log.Warn("shutdown: worker did not stop in time", "worker", what)
+	}
+}
+
+// watchConfig re-seeds the store whenever config.yaml changes. Returns when ctx
+// is cancelled (or the watcher itself fails).
+func watchConfig(ctx context.Context, store storage.Store) {
+	err := config.Watch(ctx, configPath,
+		func(c *config.Config) {
+			if err := store.Sync(c.ToMonitors()); err != nil {
+				log.Error("config reload: sync failed", "err", err)
+				return
+			}
+			log.Info("config reloaded", "monitors", len(c.Monitors))
+		},
+		func(err error) {
+			log.Warn("config reload skipped (keeping previous list)", "err", err)
+		},
+	)
+	if err != nil {
+		log.Warn("config watcher stopped", "err", err)
+	}
+}
+
 func run(srv *api.API, sched *scheduler.Scheduler, store storage.Store, notifier *notify.Async, ln net.Listener) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	go sched.Run(ctx)
-	go retentionLoop(ctx, store)
-
-	go func() {
-		err := config.Watch(ctx, configPath,
-			func(c *config.Config) {
-				if err := store.Sync(c.ToMonitors()); err != nil {
-					log.Error("config reload: sync failed", "err", err)
-					return
-				}
-				log.Info("config reloaded", "monitors", len(c.Monitors))
-			},
-			func(err error) {
-				log.Warn("config reload skipped (keeping previous list)", "err", err)
-			},
-		)
-		if err != nil {
-			log.Warn("config watcher stopped", "err", err)
-		}
-	}()
+	// Every goroutine that writes to the store reports when it is done, so the
+	// store can be closed only after the last writer has stopped.
+	schedDone := start(func() { sched.Run(ctx) })
+	retentionDone := start(func() { retentionLoop(ctx, store) })
+	watchDone := start(func() { watchConfig(ctx, store) })
 
 	log.Info("termupd listening", "socket", socketPath)
 
@@ -198,12 +227,22 @@ func run(srv *api.API, sched *scheduler.Scheduler, store storage.Store, notifier
 		if err := srv.Shutdown(shCtx); err != nil {
 			log.Error("shutdown error", "err", err)
 		}
+		// Stop the store's writers first: in-flight probes, the retention sweep
+		// and a config reload all write, and a write after Close just errors.
+		waitFor("scheduler", schedDone)
+		waitFor("retention sweep", retentionDone)
+		waitFor("config watcher", watchDone)
+
 		// Deliver the alerts still queued. Bounded: a stuck provider must not
 		// hold the process open.
 		drainCtx, cancelDrain := context.WithTimeout(context.Background(), notifyDrainTimeout)
 		defer cancelDrain()
 		if err := notifier.Close(drainCtx); err != nil {
 			log.Warn("notifier drain", "err", err)
+		}
+
+		if err := store.Close(); err != nil {
+			log.Error("store close", "err", err)
 		}
 		log.Info("termupd stopped")
 	}

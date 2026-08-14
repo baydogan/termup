@@ -12,6 +12,8 @@ import (
 // dashboard bar. Persistence/retention is a later phase.
 const historySize = 60
 
+var _ Store = (*Memory)(nil)
+
 type Memory struct {
 	mu       sync.RWMutex
 	monitors []monitor.Monitor
@@ -38,6 +40,9 @@ func (s *Memory) History(name string) ([]monitor.Result, error) {
 	copy(out, h)
 	return out, nil
 }
+
+// Close satisfies Store; the in-memory adapter holds no external resources.
+func (s *Memory) Close() error { return nil }
 
 func (s *Memory) Save(r monitor.Result) error {
 	s.mu.Lock()

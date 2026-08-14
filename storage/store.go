@@ -17,6 +17,10 @@ type Reader interface {
 type Store interface {
 	Reader
 	Writer
+	// Close releases the adapter's resources. Part of the port so every adapter
+	// answers for its own lifecycle (no-op where there is nothing to release);
+	// the daemon calls it once, after the writers have stopped.
+	Close() error
 }
 
 type Writer interface {

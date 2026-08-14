@@ -318,3 +318,45 @@ func TestRunTicksThenStopsOnCancel(t *testing.T) {
 		t.Fatal("Run did not return after context cancel")
 	}
 }
+
+// TestRunWaitsForInFlightProbeBeforeReturning is the guarantee the daemon's
+// shutdown sequence relies on: once Run has returned, nothing writes to the
+// store any more, so it is safe to close.
+func TestRunWaitsForInFlightProbeBeforeReturning(t *testing.T) {
+	store := storage.New(monitor.Monitor{Name: "x", URL: "http://x"})
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	prober := proberFunc(func(m *monitor.Monitor) monitor.Result {
+		entered <- struct{}{}
+		<-release // still probing while the context gets cancelled
+		return monitor.Result{MonitorName: m.Name, StatusCode: 200}
+	})
+	clk := &controllableClock{tick: make(chan time.Time)}
+	s := New(prober, store, monitor.NewMachine(), monitor.NewCertTracker(), monitor.NewFlapTracker(),
+		&recordingNotifier{}, clk, 30*time.Second, time.Second, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { s.Run(ctx); close(done) }()
+
+	<-entered
+	cancel()
+
+	select {
+	case <-done:
+		t.Fatal("Run returned while a probe was still in flight")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not return after the in-flight probe finished")
+	}
+
+	// The in-flight result was persisted before Run returned.
+	if h, _ := store.History("x"); len(h) != 1 {
+		t.Errorf("history len = %d, want 1", len(h))
+	}
+}
