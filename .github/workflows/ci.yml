@@ -14,7 +14,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The first run also compiles the linter; later runs hit setup-go's cache.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -42,6 +43,13 @@ jobs:
       # are all touched from the concurrent probe pool.
       - name: test
         run: go test ./... -race -covermode=atomic -coverprofile=coverage.out
+
+      # Run after the tests so a style finding cannot hide a failing test. Pinned
+      # and run through the Go toolchain rather than an action, so CI and local
+      # runs are literally the same command; setup-go's cache keeps the rebuild
+      # off the critical path after the first run.
+      - name: golangci-lint
+        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.2 run ./...
 
       - name: coverage
         run: |
