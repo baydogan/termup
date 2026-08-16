@@ -7,6 +7,9 @@ binaries. `termupd` continuously probes a list of targets, evaluates them, and
 alerts on state changes; `termup` is a thin read-only client that renders a live
 terminal dashboard by talking to the daemon.
 
+![termup dashboard: per-target up/down bars, with the selected check's status code
+and DNS/connect/TLS/TTFB breakdown below the grid](docs/dashboard.png)
+
 ## How it works
 
 Two binaries in one repo (like `dockerd`/`docker`):

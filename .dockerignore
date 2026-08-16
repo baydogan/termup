@@ -10,3 +10,4 @@ testdata
 bin
 *.db
 *.db-journal
+docs
