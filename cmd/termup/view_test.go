@@ -41,72 +41,40 @@ func TestRenderCardUnknownIsNotUnhealthy(t *testing.T) {
 	}
 }
 
-func TestBarColorMarksSelectionWithLight(t *testing.T) {
-	cases := []struct {
-		name         string
-		up, selected bool
-		want         lipgloss.Color
-	}{
-		{"up", true, false, style.Green},
-		{"up selected", true, true, style.GreenBright},
-		{"down", false, false, style.Red},
-		{"down selected", false, true, style.RedBright},
+func TestBarColor(t *testing.T) {
+	if got := barColor(true); got != style.Green {
+		t.Errorf("up bar colour = %v, want %v", got, style.Green)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := barColor(tc.up, tc.selected); got != tc.want {
-				t.Errorf("barColor(%v, %v) = %v, want %v", tc.up, tc.selected, got, tc.want)
-			}
-		})
-	}
-	// The highlight must be a different shade, otherwise selection is invisible.
-	if style.GreenBright == style.Green || style.RedBright == style.Red {
-		t.Error("bright shades equal the base colors")
+	if got := barColor(false); got != style.Red {
+		t.Errorf("down bar colour = %v, want %v", got, style.Red)
 	}
 }
 
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
-// TestRenderBarSelectionKeepsGeometry is the regression for the selected bar
-// appearing to shift sideways: selection changes color only, so the glyphs and
-// the rendered width must be identical with and without a selection.
-func TestRenderBarSelectionKeepsGeometry(t *testing.T) {
-	recent := []api.CheckDTO{{Up: true}, {Up: false}, {Up: true}, {Up: true}}
-	plain := ansiRe.ReplaceAllString(renderBar(recent, -1), "")
+// TestRenderBarIsUniform pins the decision behind the marker row: bars are never
+// restyled per check, so nothing about the selection can change their glyphs or
+// width (the earlier ▌→█ swap made the selected bar look like it had moved).
+func TestRenderBarIsUniform(t *testing.T) {
+	recent := []api.CheckDTO{{Up: true}, {Up: false}, {Up: true}}
+	plain := ansiRe.ReplaceAllString(renderBar(recent), "")
 
-	for _, selIdx := range []int{0, 1, len(recent) - 1} {
-		got := ansiRe.ReplaceAllString(renderBar(recent, selIdx), "")
-		if got != plain {
-			t.Errorf("selIdx %d changed the glyphs: %q, want %q", selIdx, got, plain)
-		}
-		if w, want := lipgloss.Width(renderBar(recent, selIdx)), lipgloss.Width(renderBar(recent, -1)); w != want {
-			t.Errorf("selIdx %d changed the width: %d, want %d", selIdx, w, want)
-		}
+	if got := strings.Count(plain, barGlyph); got != len(recent) {
+		t.Errorf("bar has %d glyphs, want %d (%q)", got, len(recent), plain)
 	}
-	if strings.Contains(plain, "█") {
-		t.Errorf("bar still uses the full block glyph: %q", plain)
+	if strings.Trim(plain, barGlyph) != "" {
+		t.Errorf("bar mixes glyphs: %q", plain)
 	}
-	if n := strings.Count(plain, barGlyph); n != len(recent) {
-		t.Errorf("bar has %d glyphs, want %d", n, len(recent))
-	}
-}
-
-// TestBarStyleMarksSelection checks the attributes that carry the emphasis,
-// independent of whether the test process has a colour-capable TTY. Both are cell
-// attributes, so they cannot shift the bar (the geometry test above pins that);
-// the marker row is what identifies the selection.
-func TestBarStyleMarksSelection(t *testing.T) {
-	sel := barStyle(false, true)
-	if got := sel.GetForeground(); got != style.RedBright {
-		t.Errorf("selected down bar colour = %v, want %v", got, style.RedBright)
-	}
-	if got := sel.GetBackground(); got != style.BarSelBg {
-		t.Errorf("selected bar background = %v, want %v", got, style.BarSelBg)
+	if got := lipgloss.Width(renderBar(recent)); got != len(recent) {
+		t.Errorf("bar width = %d, want %d", got, len(recent))
 	}
 
-	plain := barStyle(true, false)
-	if plain.GetBackground() == style.BarSelBg {
-		t.Error("unselected bar should not be tinted")
+	// The window keeps only the newest barLen checks.
+	if got := lipgloss.Width(renderBar(recentN(barLen + 5))); got != barLen {
+		t.Errorf("long history bar width = %d, want %d", got, barLen)
+	}
+	if got := renderBar(nil); !strings.Contains(got, "no data yet") {
+		t.Errorf("empty history bar = %q", got)
 	}
 }
 

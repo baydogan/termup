@@ -113,7 +113,7 @@ func renderCard(h api.MonitorHealthDTO, selIdx int) string {
 		title,
 		style.Subtle.Render(truncate(h.URL, cardWidth)),
 		"", // breathing room: the url sits right on top of the bars otherwise
-		renderBar(h.Recent, selIdx),
+		renderBar(h.Recent),
 		renderMarker(h.Recent, selIdx),
 		style.Subtle.Render(statLine),
 	)
@@ -152,10 +152,10 @@ func badgeFor(state string) string {
 // the Gatus bars. Every bar uses it, selected or not — see barColor.
 const barGlyph = "▌"
 
-// renderBar draws one colored block per recent check (green up, red down), with
-// the keyboard-selected bar (selIdx, -1 if none) brightened. Only the most recent
-// bars that fit the card are shown.
-func renderBar(recent []api.CheckDTO, selIdx int) string {
+// renderBar draws one colored block per recent check (green up, red down). It
+// knows nothing about the selection: restyling a bar to mark it never read well
+// (see renderMarker), so the bars stay uniform and the marker row points.
+func renderBar(recent []api.CheckDTO) string {
 	if len(recent) == 0 {
 		return style.Subtle.Render("no data yet")
 	}
@@ -163,8 +163,8 @@ func renderBar(recent []api.CheckDTO, selIdx int) string {
 		recent = recent[len(recent)-barLen:]
 	}
 	var b strings.Builder
-	for i, c := range recent {
-		b.WriteString(barStyle(c.Up, i == selIdx).Render(barGlyph))
+	for _, c := range recent {
+		b.WriteString(lipgloss.NewStyle().Foreground(barColor(c.Up)).Render(barGlyph))
 	}
 	return b.String()
 }
@@ -172,32 +172,11 @@ func renderBar(recent []api.CheckDTO, selIdx int) string {
 // markerGlyph points at the selected bar from the row below it.
 const markerGlyph = "▲"
 
-// barStyle is how one bar is painted. The selected cell keeps the glyph and gains
-// a brighter colour plus a tinted background; the pointer in the marker row is
-// what actually identifies it. Bold and a wider glyph were both tried first: a
-// solid block has no stroke weight to thicken, and ▌→█ fills the other half of
-// the cell, which reads as the bar sliding sideways.
-func barStyle(up, selected bool) lipgloss.Style {
-	s := lipgloss.NewStyle().Foreground(barColor(up, selected))
-	if selected {
-		s = s.Background(style.BarSelBg)
-	}
-	return s
-}
-
-// barColor marks selection with light, not geometry: the glyph is the same in
-// every state, so the bar cannot appear to move when the selection lands on it.
-func barColor(up, selected bool) lipgloss.Color {
-	switch {
-	case up && selected:
-		return style.GreenBright
-	case up:
+func barColor(up bool) lipgloss.Color {
+	if up {
 		return style.Green
-	case selected:
-		return style.RedBright
-	default:
-		return style.Red
 	}
+	return style.Red
 }
 
 // renderDetail is the panel under the grid: one line describing the selected check.
