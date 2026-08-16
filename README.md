@@ -53,7 +53,7 @@ config.yaml ──► termupd ──► probe ──► state machine ──► 
 ### With Docker (recommended)
 
 ```bash
-make up        # build the image and run the daemon continuously
+make up        # seeds config.yaml from the template, builds, runs the daemon
 make logs      # follow probes / alerts
 make watch     # attach the dashboard (inside the container)
 make down      # stop (keeps the db volume; `down -v` wipes it)
@@ -63,6 +63,7 @@ make restart   # apply config.yaml changes
 ### From source
 
 ```bash
+cp config.example.yaml config.yaml   # your target list (not tracked by git)
 make build                 # -> bin/termupd, bin/termup
 ./bin/termupd              # terminal 1: the daemon (reads ./config.yaml)
 ./bin/termup watch         # terminal 2: the dashboard
@@ -72,6 +73,11 @@ Requires Go 1.26+. The daemon writes `termup.db` (SQLite) and listens on
 `/tmp/termupd.sock`.
 
 ## Configuration
+
+The daemon reads `./config.yaml`, which is per-installation and not tracked;
+`config.example.yaml` is the template to copy. A hand-run set covering every
+up/down case (redirect, 4xx, 5xx, timeout, refused, DNS failure, expired TLS)
+lives in `testdata/manual-cases.yaml`.
 
 `config.yaml`:
 

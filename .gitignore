@@ -7,6 +7,10 @@ CLAUDE.md
 /termupd
 /bin/
 
+# the live target list is per-installation; the tracked template is
+# config.example.yaml (see also testdata/manual-cases.yaml)
+/config.yaml
+
 # local dev database (sqlite writes sidecar files next to it)
 /termup.db
 /termup.db-*

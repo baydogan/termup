@@ -1,4 +1,13 @@
-# Manual test set — one case per line. (Endpoints verified reachable.)
+# Manual verification set: one monitor per up/down case, used to eyeball the
+# semantics against real endpoints. Nothing loads this automatically — the daemon
+# reads ./config.yaml, so use it with:
+#
+#   cp testdata/manual-cases.yaml config.yaml
+#
+# The targets are third-party demo services (httpbin, badssl); they go down or
+# rate-limit on their own from time to time, which is fine for eyeballing but is
+# why this is not the shipped example config.
+#
 # Semantics: up = 2xx only. 3xx/4xx/5xx and no-response = down.
 # Cert is captured once the TLS handshake completes (regardless of status);
 # if the handshake fails (expired/self-signed) there is NO cert.

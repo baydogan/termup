@@ -1,0 +1,30 @@
+# termup target list — the single source of truth for what termupd probes.
+# Copy it and edit the copy; the daemon watches the file and reloads on save
+# (a broken edit is logged and the previous list is kept):
+#
+#   cp config.example.yaml config.yaml
+#
+# Semantics: up = 2xx only. 3xx/4xx/5xx and no response (timeout, connection
+# refused, DNS or TLS failure) are down. A target is declared down after 3
+# consecutive failures and recovers on the first 2xx.
+
+monitors:
+  - name: example
+    url: https://example.com
+
+  # Replace these with your own targets. Names must be unique and non-empty,
+  # urls must be absolute http(s) urls.
+  - name: my-api
+    url: https://api.example.com/health
+
+# Optional alert targets. stdout is always on; anything here is added on top.
+# Unlike the monitor list, notifiers are read once at startup — adding one needs
+# a restart. Uncomment and fill in the webhook urls you actually use.
+#
+#notifiers:
+#  - type: slack
+#    url: https://hooks.slack.com/services/XXX/YYY/ZZZ
+#  - type: discord
+#    url: https://discord.com/api/webhooks/XXX/YYY
+#  - type: webhook
+#    url: https://my.endpoint/termup
