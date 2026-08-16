@@ -67,7 +67,9 @@ func containsMonitor(ms []monitor.Monitor, name string) bool {
 // buildHealth maps a monitor + its result history into the dashboard DTO. The
 // card State is the debounced machine state; the bars/uptime stay per-probe raw.
 func buildHealth(m monitor.Monitor, hist []monitor.Result, state monitor.State) MonitorHealthDTO {
-	dto := MonitorHealthDTO{Name: m.Name, URL: m.URL, State: state.String()}
+	// Recent starts as an empty slice, not nil: a monitor with no history yet must
+	// serialise as "recent": [] so a client can iterate it without a null check.
+	dto := MonitorHealthDTO{Name: m.Name, URL: m.URL, State: state.String(), Recent: []CheckDTO{}}
 	if len(hist) == 0 {
 		return dto
 	}

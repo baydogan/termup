@@ -61,4 +61,8 @@ func TestBuildHealthEmptyHistory(t *testing.T) {
 	if dto.UptimePct != 0 || len(dto.Recent) != 0 || dto.CertExpiry != 0 {
 		t.Errorf("empty history should give zero-valued health: %+v", dto)
 	}
+	// Empty, not nil: the wire shape must stay an array (see TestDashboardRecentIsNeverNull).
+	if dto.Recent == nil {
+		t.Error("Recent is nil; it must be an empty slice so it serialises as []")
+	}
 }

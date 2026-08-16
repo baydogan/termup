@@ -127,6 +127,29 @@ func TestDashboardRoute(t *testing.T) {
 	}
 }
 
+// TestDashboardRecentIsNeverNull pins the wire shape: a monitor that has not been
+// probed yet still reports an array, so a client can iterate it unconditionally.
+func TestDashboardRecentIsNeverNull(t *testing.T) {
+	a := New(fakeReader{monitors: []monitor.Monitor{{Name: "fresh", URL: "http://fresh"}}}, fakeState{})
+
+	resp := do(t, a, "/v1/dashboard")
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	body := decode[struct {
+		Monitors []struct {
+			Recent json.RawMessage `json:"recent"`
+		} `json:"monitors"`
+	}](t, resp)
+
+	if len(body.Monitors) != 1 {
+		t.Fatalf("monitors len = %d, want 1", len(body.Monitors))
+	}
+	if got := string(body.Monitors[0].Recent); got != "[]" {
+		t.Errorf("recent = %s, want []", got)
+	}
+}
+
 func TestRoutesMapStoreErrorTo500(t *testing.T) {
 	boom := errors.New("store down")
 	tests := []struct {
