@@ -27,6 +27,26 @@ func rewrite(t *testing.T, path, body string) {
 	}
 }
 
+// awaitReload waits for a reload carrying want monitors, draining earlier ones.
+// A single save can emit several fsnotify WRITE events, so the same config may
+// already be queued more than once; that is inherent to watching a file, not a
+// failure, and the test must not assume one save means exactly one reload.
+func awaitReload(t *testing.T, reloads <-chan *Config, want int) {
+	t.Helper()
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case c := <-reloads:
+			if len(c.Monitors) == want {
+				return
+			}
+			t.Logf("draining duplicate reload with %d monitors", len(c.Monitors))
+		case <-deadline:
+			t.Fatalf("no reload with %d monitors", want)
+		}
+	}
+}
+
 func TestWatchReloadsAndSurvivesBadConfig(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
@@ -46,14 +66,7 @@ func TestWatchReloadsAndSurvivesBadConfig(t *testing.T) {
 
 	// Valid change -> onReload with the new list.
 	rewrite(t, path, monitorsYAML("a", "b"))
-	select {
-	case c := <-reloads:
-		if len(c.Monitors) != 2 {
-			t.Errorf("reload monitors = %d, want 2", len(c.Monitors))
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("no reload after a valid change")
-	}
+	awaitReload(t, reloads, 2)
 
 	// Invalid change -> onError (and the watcher must keep running).
 	rewrite(t, path, "monitors: [broken")
@@ -65,14 +78,7 @@ func TestWatchReloadsAndSurvivesBadConfig(t *testing.T) {
 
 	// A valid change after the bad one still reloads (watcher survived).
 	rewrite(t, path, monitorsYAML("a", "b", "c"))
-	select {
-	case c := <-reloads:
-		if len(c.Monitors) != 3 {
-			t.Errorf("reload monitors = %d, want 3", len(c.Monitors))
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("watcher did not survive the bad config")
-	}
+	awaitReload(t, reloads, 3)
 
 	cancel()
 	select {

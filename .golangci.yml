@@ -1,0 +1,27 @@
+version: "2"
+
+linters:
+  # Standard set: errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+
+  settings:
+    errcheck:
+      # Deliberate drops: closing a reader we are done with, rolling back a
+      # committed transaction, or discarding a response body cannot be acted on.
+      # The one place where the discarded error would matter (the probe's body
+      # read) is tracked separately, not hidden here.
+      exclude-functions:
+        - io.Copy
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (*database/sql.DB).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.Tx).Rollback
+        - (*github.com/fsnotify/fsnotify.Watcher).Close
+
+  exclusions:
+    rules:
+      # Tests close sockets, remove temp files and fire notifiers for effect;
+      # a failure there surfaces as a failing assertion, not a swallowed error.
+      - path: _test\.go
+        linters: [errcheck]

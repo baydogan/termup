@@ -103,9 +103,12 @@ func (n *recordingNotifier) Notify(e notify.Event) error {
 func TestOffsetIsDeterministicAndSpread(t *testing.T) {
 	s := &Scheduler{interval: 30 * time.Second}
 
-	// Deterministic: same name -> same offset.
-	if s.offset("api-prod") != s.offset("api-prod") {
-		t.Error("offset not deterministic for the same name")
+	// Deterministic: a second scheduler derives the same phase for the same name,
+	// i.e. the offset comes from the name hash and not from per-instance state
+	// (an RNG would drift here, and restarts would reshuffle the spread).
+	restarted := &Scheduler{interval: 30 * time.Second}
+	if got, want := restarted.offset("api-prod"), s.offset("api-prod"); got != want {
+		t.Errorf("offset(api-prod) = %v on a second scheduler, want %v", got, want)
 	}
 
 	// In range [0, interval).
