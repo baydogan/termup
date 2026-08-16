@@ -21,11 +21,9 @@ func New(store Reader, state StateReader) *API {
 }
 
 func (a *API) routes() {
-	listH := &ListHandler{store: a.store}
 	statusH := &StatusHandler{store: a.store, state: a.state}
 	dashH := &DashboardHandler{store: a.store, state: a.state}
 
-	a.router.Get("/v1/monitors", handle[ListRequest, ListResponse](listH))
 	a.router.Get("/v1/monitors/:name/status", handle[StatusRequest, StatusResponse](statusH))
 	a.router.Get("/v1/dashboard", handle[DashboardRequest, DashboardResponse](dashH))
 }

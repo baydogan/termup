@@ -311,7 +311,7 @@ func waitForAPI(t *testing.T, sock string) {
 	t.Helper()
 	client := socketClient(sock)
 	for i := 0; ; i++ {
-		resp, err := client.Get("http://localhost/v1/monitors")
+		resp, err := client.Get("http://localhost/v1/dashboard")
 		if err == nil {
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusOK {

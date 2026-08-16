@@ -62,42 +62,6 @@ func decode[T any](t *testing.T, resp *http.Response) T {
 	return out
 }
 
-func TestListRoute(t *testing.T) {
-	a := New(fakeReader{monitors: []monitor.Monitor{
-		{Name: "a", URL: "http://a"},
-		{Name: "b", URL: "http://b"},
-	}}, fakeState{})
-
-	resp := do(t, a, "/v1/monitors")
-	if resp.StatusCode != fiber.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-	body := decode[ListResponse](t, resp)
-	want := []MonitorDTO{{Name: "a", URL: "http://a"}, {Name: "b", URL: "http://b"}}
-	if len(body.Monitors) != len(want) {
-		t.Fatalf("monitors = %+v, want %+v", body.Monitors, want)
-	}
-	for i, m := range body.Monitors {
-		if m != want[i] {
-			t.Errorf("monitors[%d] = %+v, want %+v", i, m, want[i])
-		}
-	}
-}
-
-func TestListRouteEmptyStoreGivesEmptyArray(t *testing.T) {
-	a := New(fakeReader{}, fakeState{})
-
-	resp := do(t, a, "/v1/monitors")
-	if resp.StatusCode != fiber.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-	// Handlers build non-nil slices so the JSON is [] and not null.
-	raw := decode[map[string]json.RawMessage](t, resp)
-	if got := string(raw["monitors"]); got != "[]" {
-		t.Errorf("monitors JSON = %s, want []", got)
-	}
-}
-
 func TestStatusRoute(t *testing.T) {
 	a := New(
 		fakeReader{monitors: []monitor.Monitor{{Name: "a", URL: "http://a"}}},
@@ -170,7 +134,6 @@ func TestRoutesMapStoreErrorTo500(t *testing.T) {
 		store  fakeReader
 		target string
 	}{
-		{"list", fakeReader{listErr: boom}, "/v1/monitors"},
 		{"status", fakeReader{listErr: boom}, "/v1/monitors/a/status"},
 		{"dashboard list", fakeReader{listErr: boom}, "/v1/dashboard"},
 		{
@@ -209,7 +172,7 @@ func TestServeAndShutdown(t *testing.T) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	var resp *http.Response
 	for i := 0; ; i++ {
-		resp, err = client.Get("http://" + addr + "/v1/monitors")
+		resp, err = client.Get("http://" + addr + "/v1/dashboard")
 		if err == nil {
 			break
 		}

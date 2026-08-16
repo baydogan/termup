@@ -18,20 +18,6 @@ type StateReader interface {
 	State(name string) monitor.State
 }
 
-type ListHandler struct{ store Reader }
-
-func (h *ListHandler) Handle(_ context.Context, _ *ListRequest) (*ListResponse, error) {
-	ms, err := h.store.List()
-	if err != nil {
-		return nil, err
-	}
-	out := make([]MonitorDTO, 0, len(ms))
-	for _, m := range ms {
-		out = append(out, MonitorDTO{Name: m.Name, URL: m.URL})
-	}
-	return &ListResponse{Monitors: out}, nil
-}
-
 type StatusHandler struct {
 	store Reader
 	state StateReader

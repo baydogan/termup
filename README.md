@@ -137,9 +137,11 @@ Read-only, served over the Unix socket (JSON):
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/v1/monitors` | list configured monitors |
 | GET | `/v1/monitors/:name/status` | a monitor's current (debounced) state |
 | GET | `/v1/dashboard` | per-monitor health + recent checks |
+
+`termup watch` uses `/v1/dashboard`; `status` is there for scripts (`curl`), which
+is why there is no `termup status` command duplicating it.
 
 ```bash
 curl --unix-socket /tmp/termupd.sock http://localhost/v1/dashboard
