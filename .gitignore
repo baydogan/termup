@@ -10,3 +10,6 @@ CLAUDE.md
 # local dev database (sqlite writes sidecar files next to it)
 /termup.db
 /termup.db-*
+
+# coverage profile (CI writes it; see .github/workflows/ci.yml)
+/coverage.out

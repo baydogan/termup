@@ -1,5 +1,7 @@
 # termup
 
+[![CI](https://github.com/baydogan/termup/actions/workflows/ci.yml/badge.svg)](https://github.com/baydogan/termup/actions/workflows/ci.yml)
+
 Self-hosted uptime & synthetic monitoring — CLI-first, single project, two small
 binaries. `termupd` continuously probes a list of targets, evaluates them, and
 alerts on state changes; `termup` is a thin read-only client that renders a live
