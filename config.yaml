@@ -49,4 +49,4 @@ monitors:
   - name: body-check
     url: https://httpbin.org/json
   - name: header-check
-    url: https://httpbin.org/response-headers?X-Test=zerotolerance
+    url: https://httpbin.org/response-headers?X-Test=termup

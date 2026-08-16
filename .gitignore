@@ -1,10 +1,12 @@
 .idea/
+.DS_Store
 CLAUDE.md
 
 # compiled binaries (root-level only; cmd/termup* dirs are anchored out)
 /termup
 /termupd
-/zt
-/ztd
 /bin/
+
+# local dev database (sqlite writes sidecar files next to it)
 /termup.db
+/termup.db-*
