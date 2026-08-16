@@ -15,9 +15,7 @@ func (m model) View() string {
 }
 
 // headerBlocks are the blocks drawn above the grid, in order: the title line, a
-// blank row, the always-present filter box, another blank row. checkAt measures
-// this same slice (see headerRows), so the renderer and the hit-test cannot
-// drift apart when the header changes.
+// blank row, the always-present filter box, another blank row.
 func (m model) headerBlocks() []string {
 	return []string{m.headerLine(), "", m.filterBox(), ""}
 }
@@ -53,8 +51,7 @@ func (m model) body() string {
 	return arrangeGrid(cards, m.width)
 }
 
-// footer is the key help, replaced by the detail panel while a check is hovered
-// or selected.
+// footer is the key help, replaced by the detail panel while a check is selected.
 func (m model) footer() string {
 	if hi, ok := m.detail(); ok {
 		return renderDetail(hi)
@@ -115,10 +112,26 @@ func renderCard(h api.MonitorHealthDTO, selIdx int) string {
 		lipgloss.Left,
 		title,
 		style.Subtle.Render(truncate(h.URL, cardWidth)),
+		"", // breathing room: the url sits right on top of the bars otherwise
 		renderBar(h.Recent, selIdx),
+		renderMarker(h.Recent, selIdx),
 		style.Subtle.Render(statLine),
 	)
 	return cardStyle.Width(cardWidth).Render(body)
+}
+
+// renderMarker is the row under the bar that points at the selected check. It is
+// always drawn, even with nothing selected, so every card in a grid row keeps the
+// same height (JoinHorizontal would otherwise pad them apart).
+func renderMarker(recent []api.CheckDTO, selIdx int) string {
+	shown := len(recent)
+	if shown > barLen {
+		shown = barLen
+	}
+	if selIdx < 0 || selIdx >= shown {
+		return " "
+	}
+	return strings.Repeat(" ", selIdx) + style.Marker.Render(markerGlyph)
 }
 
 // badgeFor maps the monitor's wire state to its badge. unknown is its own badge:
@@ -135,10 +148,13 @@ func badgeFor(state string) string {
 	}
 }
 
-// renderBar draws one colored block per recent check (green up, red down). The
-// keyboard-selected bar (selIdx, -1 if none) is a full block; the rest are
-// half-blocks that pack tightly like the Gatus bars. Only the most recent bars
-// that fit the card are shown.
+// barGlyph is a left half block: consecutive ones pack tightly with a gap, like
+// the Gatus bars. Every bar uses it, selected or not — see barColor.
+const barGlyph = "▌"
+
+// renderBar draws one colored block per recent check (green up, red down), with
+// the keyboard-selected bar (selIdx, -1 if none) brightened. Only the most recent
+// bars that fit the card are shown.
 func renderBar(recent []api.CheckDTO, selIdx int) string {
 	if len(recent) == 0 {
 		return style.Subtle.Render("no data yet")
@@ -148,21 +164,44 @@ func renderBar(recent []api.CheckDTO, selIdx int) string {
 	}
 	var b strings.Builder
 	for i, c := range recent {
-		glyph := "▌"
-		if i == selIdx {
-			glyph = "█"
-		}
-		color := style.Green
-		if !c.Up {
-			color = style.Red
-		}
-		b.WriteString(lipgloss.NewStyle().Foreground(color).Render(glyph))
+		b.WriteString(barStyle(c.Up, i == selIdx).Render(barGlyph))
 	}
 	return b.String()
 }
 
-// renderDetail is the hover panel: one line describing a single check.
-func renderDetail(hi hoverInfo) string {
+// markerGlyph points at the selected bar from the row below it.
+const markerGlyph = "▲"
+
+// barStyle is how one bar is painted. The selected cell keeps the glyph and gains
+// a brighter colour plus a tinted background; the pointer in the marker row is
+// what actually identifies it. Bold and a wider glyph were both tried first: a
+// solid block has no stroke weight to thicken, and ▌→█ fills the other half of
+// the cell, which reads as the bar sliding sideways.
+func barStyle(up, selected bool) lipgloss.Style {
+	s := lipgloss.NewStyle().Foreground(barColor(up, selected))
+	if selected {
+		s = s.Background(style.BarSelBg)
+	}
+	return s
+}
+
+// barColor marks selection with light, not geometry: the glyph is the same in
+// every state, so the bar cannot appear to move when the selection lands on it.
+func barColor(up, selected bool) lipgloss.Color {
+	switch {
+	case up && selected:
+		return style.GreenBright
+	case up:
+		return style.Green
+	case selected:
+		return style.RedBright
+	default:
+		return style.Red
+	}
+}
+
+// renderDetail is the panel under the grid: one line describing the selected check.
+func renderDetail(hi checkRef) string {
 	c := hi.check
 	badge := style.HealthyBadge
 	if !c.Up {

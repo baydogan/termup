@@ -15,6 +15,20 @@ var (
 	Accent = lipgloss.Color("39") // selection highlight
 )
 
+// Selected-check bar: a brighter shade of the up/down colour on a tinted cell.
+// The glyph never changes — swapping ▌ for █ fills the other half of the cell,
+// which reads as the bar shifting sideways — and a solid block cannot carry
+// weight, so bold is not a usable channel either. What is left is colour, the
+// cell background and the underline.
+var (
+	GreenBright = lipgloss.Color("46")
+	RedBright   = lipgloss.Color("203")
+	BarSelBg    = lipgloss.Color("238")
+
+	// Marker is the pointer drawn under the selected bar, in the selection colour.
+	Marker = lipgloss.NewStyle().Bold(true).Foreground(Accent)
+)
+
 // Text styles.
 var (
 	Title   = lipgloss.NewStyle().Bold(true).Foreground(Fg)

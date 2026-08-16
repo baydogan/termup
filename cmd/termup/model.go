@@ -22,20 +22,20 @@ type model struct {
 	updated   time.Time
 	width     int
 	height    int
-	hover     *hoverInfo
 	sel       *selRef
 	filter    textinput.Model
 	filtering bool // true while the filter input is focused
 }
 
-// hoverInfo is the check the mouse is currently over, shown in the detail panel.
-type hoverInfo struct {
+// checkRef is the check the detail panel describes: the one the keyboard
+// selection points at.
+type checkRef struct {
 	name  string
 	check api.CheckDTO
 }
 
 // selRef is the keyboard selection: a monitor and a displayed bar index within
-// it (0-based over the shown window). Persistent, unlike the transient hover.
+// it (0-based over the shown window).
 type selRef struct {
 	mon   int
 	check int
@@ -98,7 +98,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "/":
 			m.filtering = true
-			m.hover = nil
 			return m, m.filter.Focus()
 		case "r":
 			return m, m.fetch
@@ -113,13 +112,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-	case tea.MouseMsg:
-		if name, c, ok := m.checkAt(msg.X, msg.Y); ok {
-			m.hover = &hoverInfo{name: name, check: c}
-		} else {
-			m.hover = nil
-		}
-		return m, nil
 	case tickMsg:
 		return m, tea.Batch(m.fetch, tick())
 	case dataMsg:
@@ -149,18 +141,15 @@ func (m model) visible() []api.MonitorHealthDTO {
 	return out
 }
 
-// detail resolves what the panel shows: the mouse hover takes precedence over
-// the persistent keyboard selection.
-func (m model) detail() (hoverInfo, bool) {
-	if m.hover != nil {
-		return *m.hover, true
-	}
+// detail resolves what the panel shows: the check the keyboard selection points
+// at, if any.
+func (m model) detail() (checkRef, bool) {
 	vis := m.visible()
 	if m.sel != nil && m.sel.mon < len(vis) {
 		h := vis[m.sel.mon]
 		if idx := barStart(h) + m.sel.check; idx >= 0 && idx < len(h.Recent) {
-			return hoverInfo{name: h.Name, check: h.Recent[idx]}, true
+			return checkRef{name: h.Name, check: h.Recent[idx]}, true
 		}
 	}
-	return hoverInfo{}, false
+	return checkRef{}, false
 }

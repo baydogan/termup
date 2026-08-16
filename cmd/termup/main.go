@@ -20,7 +20,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	p := tea.NewProgram(newModel(client, base), tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(newModel(client, base), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "termup:", err)
 		os.Exit(1)

@@ -45,8 +45,8 @@ config.yaml ──► termupd ──► probe ──► state machine ──► 
   per-target phase) to avoid a thundering herd.
 - **Retention.** Results older than 30 days are pruned hourly so storage does not
   grow without bound.
-- **Terminal dashboard.** Gatus-style up/down bars per target, mouse-hover and
-  keyboard navigation for per-check detail, and a filter box.
+- **Terminal dashboard.** Gatus-style up/down bars per target, keyboard
+  navigation to any single check (with its stage timings), and a filter box.
 
 ## Quick start
 
@@ -114,9 +114,8 @@ Dashboard controls:
 
 | Key | Action |
 | --- | --- |
-| mouse hover | show a bar's detail (time · status · latency · stage timings · error) |
 | `Tab` / `Shift+Tab` | move between monitors |
-| `←` / `→` | move between a monitor's checks |
+| `←` / `→` | move between a monitor's checks; the selected one is marked with `▲` and described below the grid (time · status · latency · stage timings · error) |
 | `/` | filter by name or url |
 | `r` | refresh now |
 | `q` | quit |
