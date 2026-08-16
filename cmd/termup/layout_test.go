@@ -3,8 +3,10 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/baydogan/termup/api"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -29,9 +31,9 @@ func TestCheckAt(t *testing.T) {
 		},
 	}
 
-	// bar row y is derived from the layout constants so it tracks headerRows.
-	row0 := headerRows + barRowInCard              // grid row 0 bar line
-	row1 := headerRows + cardTotalH + barRowInCard // grid row 1 bar line
+	// bar row y is derived from the layout itself so it tracks the real header.
+	row0 := m.headerRows() + barRowInCard              // grid row 0 bar line
+	row1 := m.headerRows() + cardTotalH + barRowInCard // grid row 1 bar line
 	// bar first cell x: col0 = barColStart = 2; col1 = cardTotalW+2 = 44.
 	cases := []struct {
 		name       string
@@ -113,5 +115,74 @@ func TestGridColsIsSharedByRendererAndHitTest(t *testing.T) {
 		if rows != wantRows {
 			t.Errorf("width %d: grid has %d rows, want %d (cols=%d)", width, rows, wantRows, cols)
 		}
+	}
+}
+
+// TestHeaderRowsMatchesRenderedView is the guard that was missing: it pins
+// headerRows to what View actually draws, so adding a line to the header (or
+// changing the filter box) can no longer shift the grid out from under checkAt.
+func TestHeaderRowsMatchesRenderedView(t *testing.T) {
+	base := model{
+		width:  100,
+		filter: textinput.New(),
+		health: []api.MonitorHealthDTO{{Name: "m0", URL: "http://m0", State: "up", Recent: recentN(4)}},
+	}
+
+	cases := []struct {
+		name string
+		m    model
+	}{
+		{"idle", base},
+		{"with timestamp", func() model { m := base; m.updated = time.Unix(1000, 0); return m }()},
+		{"filter holds a query", func() model {
+			m := base
+			m.filter = textinput.New()
+			m.filter.SetValue("m0")
+			return m
+		}()},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			lines := strings.Split(tc.m.View(), "\n")
+			hr := tc.m.headerRows()
+			if hr >= len(lines) {
+				t.Fatalf("headerRows = %d but View drew only %d lines", hr, len(lines))
+			}
+			// The grid starts exactly at headerRows: that row carries a card's top
+			// border, and the row before it is the blank separator.
+			if !strings.ContainsAny(lines[hr], "╭┏") {
+				t.Errorf("row %d is not the first card row:\n%s", hr, tc.m.View())
+			}
+			if strings.TrimSpace(lines[hr-1]) != "" {
+				t.Errorf("row %d should be blank, got %q", hr-1, lines[hr-1])
+			}
+		})
+	}
+}
+
+// TestCheckAtUsesTheRenderedHeader ties the two together end to end: the bar row
+// found in the rendered output is the row checkAt resolves to a check.
+func TestCheckAtUsesTheRenderedHeader(t *testing.T) {
+	m := model{
+		width:  100,
+		filter: textinput.New(),
+		health: []api.MonitorHealthDTO{{Name: "m0", URL: "http://m0", State: "up", Recent: recentN(4)}},
+	}
+
+	lines := strings.Split(m.View(), "\n")
+	barRow := -1
+	for i, l := range lines {
+		if strings.Contains(l, "▌") {
+			barRow = i
+			break
+		}
+	}
+	if barRow < 0 {
+		t.Fatalf("no bar row in the rendered view:\n%s", m.View())
+	}
+
+	if _, _, ok := m.checkAt(barColStart, barRow); !ok {
+		t.Errorf("checkAt missed the bar row at y=%d (headerRows=%d)", barRow, m.headerRows())
 	}
 }

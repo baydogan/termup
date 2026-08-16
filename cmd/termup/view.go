@@ -11,41 +11,55 @@ import (
 )
 
 func (m model) View() string {
-	header := style.Title.Render("termup") + "  " +
-		style.Subtle.Render("health dashboard")
-	if !m.updated.IsZero() {
-		header += style.Subtle.Render(" · updated " + m.updated.Format("15:04:05"))
-	}
+	return strings.Join(append(m.headerBlocks(), m.body(), "", m.footer()), "\n")
+}
 
+// headerBlocks are the blocks drawn above the grid, in order: the title line, a
+// blank row, the always-present filter box, another blank row. checkAt measures
+// this same slice (see headerRows), so the renderer and the hit-test cannot
+// drift apart when the header changes.
+func (m model) headerBlocks() []string {
+	return []string{m.headerLine(), "", m.filterBox(), ""}
+}
+
+func (m model) headerLine() string {
+	line := style.Title.Render("termup") + "  " + style.Subtle.Render("health dashboard")
+	if !m.updated.IsZero() {
+		line += style.Subtle.Render(" · updated " + m.updated.Format("15:04:05"))
+	}
+	return line
+}
+
+// body is the grid, or the message that replaces it.
+func (m model) body() string {
 	vis := m.visible()
-	var body string
 	switch {
 	case m.err != nil:
-		body = style.Err.Render("cannot reach termupd: "+m.err.Error()) +
+		return style.Err.Render("cannot reach termupd: "+m.err.Error()) +
 			style.Subtle.Render("  (is it running?)")
 	case len(m.health) == 0:
-		body = style.Subtle.Render("loading…")
+		return style.Subtle.Render("loading…")
 	case len(vis) == 0:
-		body = style.Subtle.Render("no monitors match the filter")
-	default:
-		cards := make([]string, len(vis))
-		for i, h := range vis {
-			sel := -1
-			if m.sel != nil && m.sel.mon == i {
-				sel = m.sel.check
-			}
-			cards[i] = renderCard(h, sel)
+		return style.Subtle.Render("no monitors match the filter")
+	}
+	cards := make([]string, len(vis))
+	for i, h := range vis {
+		sel := -1
+		if m.sel != nil && m.sel.mon == i {
+			sel = m.sel.check
 		}
-		body = arrangeGrid(cards, m.width)
+		cards[i] = renderCard(h, sel)
 	}
+	return arrangeGrid(cards, m.width)
+}
 
-	footer := style.Help.Render("q quit · / filter · tab monitor · ←/→ check · r refresh")
+// footer is the key help, replaced by the detail panel while a check is hovered
+// or selected.
+func (m model) footer() string {
 	if hi, ok := m.detail(); ok {
-		footer = renderDetail(hi)
+		return renderDetail(hi)
 	}
-	// Filter box sits above the grid (Gatus-style). Its height is fixed, so the
-	// body always starts at headerRows and checkAt stays valid.
-	return header + "\n\n" + m.filterBox() + "\n\n" + body + "\n\n" + footer
+	return style.Help.Render("q quit · / filter · tab monitor · ←/→ check · r refresh")
 }
 
 // filterBox renders the always-present, Gatus-style search box above the grid.

@@ -15,12 +15,20 @@ const (
 	cardTotalH   = 6             // top border + 4 content lines + bottom border
 	barRowInCard = 3             // border + title + url, then the bar row
 	barColStart  = 2             // border + left padding before the first bar cell
-
-	// headerRows is the fixed number of rows above the grid: the title line, a
-	// blank, the 3-row filter box, and a blank. Constant (the filter box is
-	// always drawn) so checkAt's y-math stays valid.
-	headerRows = 6
 )
+
+// headerRows is how many terminal rows View draws before the grid. Measured from
+// the rendered header blocks rather than counted by hand: changing the title line
+// or the filter box then shifts the hit-test with it instead of silently
+// misrouting clicks. (A terminal narrower than the title line can still wrap it;
+// the filter box is width-bounded and does not.)
+func (m model) headerRows() int {
+	rows := 0
+	for _, b := range m.headerBlocks() {
+		rows += lipgloss.Height(b)
+	}
+	return rows
+}
 
 // arrangeGrid lays cards out in as many columns as fit the terminal width.
 func arrangeGrid(cards []string, width int) string {
@@ -71,7 +79,7 @@ func (m model) checkAt(x, y int) (string, api.CheckDTO, bool) {
 		return "", api.CheckDTO{}, false
 	}
 	cols := gridCols(m.width)
-	by := y - headerRows
+	by := y - m.headerRows()
 	if by < 0 || by%cardTotalH != barRowInCard {
 		return "", api.CheckDTO{}, false // not on a bar row
 	}
