@@ -30,8 +30,9 @@ config.yaml ──► termupd ──► probe ──► state machine ──► 
 ## Features
 
 - **Config-as-code.** Targets live in `config.yaml` (single source of truth).
-  The daemon reads it and hot-reloads on change; a broken edit keeps the previous
-  list.
+  The daemon watches the file and hot-reloads on change; a broken edit is logged
+  and the previous list is kept. (Running in Docker, changes need a restart — see
+  [Configuration](#configuration).)
 - **Up/down semantics.** Up = `2xx` only. `3xx`/`4xx`/`5xx` and no-response
   (timeout / refused / DNS / TLS error) are all down.
 - **State machine with debounce.** A target flips to *down* only after **3
@@ -103,6 +104,13 @@ notifiers:
 
 Monitor names must be unique and non-empty. Notifiers are applied at boot (not
 hot-reloaded).
+
+**Applying changes.** Running from source, the daemon watches the config's
+directory (fsnotify) and reloads within a second of a save. Running in Docker it
+does not: compose bind-mounts `config.yaml` as a single file inside the `/data`
+volume, so the file is its own mount point and writes on the host raise no inotify
+event on the directory being watched. Under Docker, apply edits with
+`make restart`.
 
 ## CLI
 
